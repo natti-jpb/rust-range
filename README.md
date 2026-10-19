@@ -75,4 +75,4 @@ npm install
 npm run dev
 ```
 
-Controles: WASD, Shift correr, C/Ctrl agachar, Espaço pular, botão direito ADS, R recarregar, Tab inventário (arrastar; botão direito move rápido; Shift divide), 1–6/roda belt, E abrir baú/pegar item, F laser/lanterna/burst, roda no ADS zoom da luneta variável, T recoil, X limpar furos, P painel, Esc abre/fecha o menu (em tela cheia) e fecha o inventário.
+Controles: WASD, Shift correr, C/Ctrl agachar, Espaço pular, botão direito ADS, R recarregar, Tab inventário (arrastar; botão direito move rápido; Shift divide), 1–6/roda belt, E abrir baú/pegar item, F laser/lanterna/burst, roda no ADS zoom da luneta variável, T recoil, X limpar furos, P painel, Esc abre o menu e sai da tela cheia (de novo: volta ao jogo) e fecha o inventário; botão de tela cheia nas configurações.

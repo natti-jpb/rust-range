@@ -15,7 +15,7 @@ import { Menu } from './game/menu.js';
 import { Weapons } from './game/weapons.js';
 import { RustViewModel, RustSounds, loadManifest, BASE } from './game/rustvm.js';
 import { RustHud } from './game/rusthud.js';
-import { GUNS, settings } from './game/config.js';
+import { GUNS, settings, save as saveSettings } from './game/config.js';
 import { t } from './game/i18n.js';
 import { MODS, AMMO } from './data/weapons.js';
 import { Inventory, Container } from './game/inventory.js';
@@ -416,16 +416,16 @@ const menu = new Menu({
     }
     audio.mcSounds?.preload();
     menu.markStarted();
-    try {
-      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-      // Em tela cheia, segura atalhos tipo Ctrl+W (agachar + andar)
-      // Escape incluso: em tela cheia o Esc chega como tecla normal e abre/fecha o menu sem sair da tela cheia
-      await navigator.keyboard?.lock?.(['Escape', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyT', 'KeyE', 'KeyF', 'Space', 'ControlLeft', 'ShiftLeft']);
-    } catch { /* sem tela cheia: segue */ }
+    if (settings.fullscreen !== false) await setFullscreen(true);
     player.lock();
   },
   onMode: (m) => weapons.setMode(m),
   onWeapon: (id) => inv.equip(id),
+  onFullscreen: () => {
+    settings.fullscreen = !document.fullscreenElement;
+    saveSettings();
+    setFullscreen(settings.fullscreen);
+  },
   onSettings: (k) => {
     if (k === 'vol') audio.setVolume(settings.vol);
     if (k === 'showTrainer') hud.trainerVisible(settings.showTrainer);
@@ -441,6 +441,20 @@ menu.local = !!manifest;
 menu.texts();
 hud.texts();
 
+// ---------- tela cheia ----------
+// Em tela cheia o keyboard.lock segura atalhos do navegador (Ctrl+W ao agachar andando) e o Esc, que então
+// chega como tecla normal: o handler abaixo sai da tela cheia e do pointer lock ele mesmo (sempre funciona).
+async function setFullscreen(on) {
+  try {
+    if (on && !document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      await navigator.keyboard?.lock?.(['Escape', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyT', 'KeyE', 'KeyF', 'Space', 'ControlLeft', 'ShiftLeft']);
+    } else if (!on && document.fullscreenElement) await document.exitFullscreen();
+  } catch { /* sem permissão/gesto: segue sem tela cheia */ }
+  menu.fullscreenLabel();
+}
+document.addEventListener('fullscreenchange', () => menu.fullscreenLabel());
+
 let menuShownAt = 0;
 player.onLockChange = (locked) => {
   invui.hud(locked || invui.open);
@@ -449,12 +463,18 @@ player.onLockChange = (locked) => {
   menu.show(!locked);
   hud.show(locked);
 };
-// Esc com o menu aberto volta ao jogo. O pointer lock aceita o pedido sem gesto quando a última saída
-// foi por exitPointerLock() (Esc no jogo em tela cheia, Tab/E do inventário)
+// Esc: no jogo abre o menu e sai da tela cheia; com o menu aberto volta ao jogo. O pointer lock aceita o
+// pedido sem gesto quando a última saída foi por exitPointerLock() (como aqui); se o próprio navegador
+// soltou o mouse (Esc fora da tela cheia), volta pelo botão Continuar. Inventário: o Esc só fecha ele.
 document.addEventListener('keydown', (e) => {
-  if (e.code !== 'Escape' || menu.el.hidden || !menu.started || invui.open || performance.now() - menuShownAt < 300) return;
-  player.lock();
-});
+  if (e.code !== 'Escape' || invui.open) return;
+  if (player.locked || document.fullscreenElement) {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (player.locked) document.exitPointerLock();
+    return;
+  }
+  if (!menu.el.hidden && menu.started && performance.now() - menuShownAt > 300) player.lock();
+}, true);
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -492,7 +512,6 @@ function frame(ts) {
     if (inp.pressed.has('Tab') || inp.pressed.has('Escape')) closeInv(); // como no Rust: Tab/Esc voltam ao jogo
     else if (!player.alive) closeInv(false);
   } else if (player.locked && player.alive) {
-    if (inp.pressed.has('Escape')) document.exitPointerLock(); // abre o menu (onLockChange)
     if (inp.pressed.has('Tab')) openInv();
     if (inp.pressed.has('KeyT')) { weapons.setMode(settings.mode === 'legacy' ? 'current' : 'legacy'); menu.refresh(); }
     if (inp.pressed.has('KeyX')) ballistics.fx.clearWall();

@@ -5,9 +5,10 @@ const $ = (id) => document.getElementById(id);
 const KEYS = []; // armas agora vão para o belt (1–6)
 
 export class Menu {
-  constructor({ onPlay, onMode, onWeapon, onSettings }) {
+  constructor({ onPlay, onMode, onWeapon, onSettings, onFullscreen }) {
     this.el = $('menu');
     $('play').addEventListener('click', onPlay);
+    $('fsToggle').addEventListener('click', onFullscreen);
     $('touchwarn').hidden = !matchMedia('(hover: none) and (pointer: coarse)').matches;
     $('modeSeg').addEventListener('click', (e) => {
       const m = e.target.closest('button')?.dataset.mode;
@@ -56,8 +57,11 @@ export class Menu {
     if (this.local) document.querySelector('footer').textContent = t('disclaimerLocal');
     $('how').innerHTML = t('how');
     if (this.started) $('play').textContent = t('resume');
+    this.fullscreenLabel();
     this.refresh();
   }
+
+  fullscreenLabel() { $('fsToggle').textContent = t(document.fullscreenElement ? 'fsExit' : 'fsEnter'); }
 
   refresh() {
     for (const b of $('modeSeg').children) b.classList.toggle('on', b.dataset.mode === settings.mode);
