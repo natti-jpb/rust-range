@@ -227,7 +227,7 @@ export class Weapons {
 
     g.shots++;
     g.lastShot = now;
-    it.ammo--;
+    if (!settings.infiniteAmmo) it.ammo--; // munição infinita: o pente nunca esvazia
     this.nextFire = now - this.nextFire < w.repeatDelay ? this.nextFire + w.repeatDelay : now + w.repeatDelay;
     this.audio.shot(w);
     this.vm.shot(w.model === 'm249' ? 0.7 : 1);

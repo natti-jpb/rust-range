@@ -43,6 +43,8 @@ export class Menu {
     bind('showTrainer', 'showTrainer', String);
     bind('mobs', 'mobs', String);
     bind('infiniteAmmo', 'infiniteAmmo', String);
+    bind('godMode', 'godMode', String);
+    bind('peacefulMobs', 'peacefulMobs', String);
     bind('lang', 'lang', String);
     if (!settings.lang) $('lang').checked = !navigator.language?.startsWith('pt');
     this.texts();

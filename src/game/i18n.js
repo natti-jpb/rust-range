@@ -60,7 +60,9 @@ const S = {
   dead: ['VOCÊ MORREU', 'YOU DIED'],
   respawn: ['Clique ou aperte Espaço para renascer', 'Click or press Space to respawn'],
   mobs: ['Mobs (zumbis, esqueletos, creepers)', 'Mobs (zombies, skeletons, creepers)'],
-  infiniteAmmo: ['Munição infinita (recarregar não gasta do inventário)', 'Infinite ammo (reloading uses no inventory ammo)'],
+  infiniteAmmo: ['Munição infinita (o pente nunca esvazia)', 'Infinite ammo (the magazine never empties)'],
+  godMode: ['God mode (não leva dano)', 'God mode (no damage)'],
+  peacefulMobs: ['Mobs não atacam (só andam pelo mapa)', 'Mobs don\'t attack (they just wander)'],
   head: ['cabeça', 'head'],
   kill: ['abatido', 'down'],
   how: [

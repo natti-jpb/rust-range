@@ -58,6 +58,7 @@ export class Entities {
     this.acc = 0;
     this.skins = {};
     this.enabled = true;
+    this.peaceful = false; // hostis não perseguem nem atacam o jogador
     this.maxHostile = 8;
     this.blockGeo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
     world.listeners.push((x, y, z) => this.checkFall(x, y + 1, z));
@@ -124,6 +125,7 @@ export class Entities {
       }
       if (m.pos.distanceTo(p.pos) > 110 || m.pos.y < -10) { this.remove(m); this.mobs.splice(i, 1); continue; }
       this.ai(m, p);
+      this.push(m, p);
       this.physics(m);
       // Mob.baseTick: som ambiente quando random(1000) < ambientSoundTime++ (intervalo 80 ticks)
       if (m.t.say && Math.random() * 1000 < (m.ambient = (m.ambient ?? 0) + 1)) { m.ambient = -80; this.hooks.sound(`${m.type}_say`, m.pos); }
@@ -151,7 +153,7 @@ export class Entities {
       if (m.hitWall) m.input.jump = true;
       return;
     }
-    const sees = alive && dist < t.follow && (dist < 6 || this.sight(m, p));
+    const sees = !this.peaceful && alive && dist < t.follow && (dist < 6 || this.sight(m, p));
     if (!sees) {
       if (--m.wander <= 0) { m.wander = 80 + Math.random() * 120; m.walking = Math.random() < 0.4; m.yaw += (Math.random() - 0.5) * 2; }
       if (m.walking) m.input.fwd = 0.5;
@@ -175,7 +177,8 @@ export class Entities {
       if (m.fuse === 1) this.hooks.sound('creeper_fuse', m.pos);
       if (m.fuse >= 30) { this.explode(m.center.clone(), 3, m); m.dead = 21; m.hp = 0; return; }
     } else {
-      m.input.fwd = 1;
+      // para no alcance do golpe em vez de atravessar/orbitar o jogador
+      m.input.fwd = dist > 1.4 ? 1 : 0;
       if (dist < 1.6 && Math.abs(p.pos.y - m.pos.y) < 1.5 && m.cool <= 0) {
         m.cool = 20;
         m.swing = 8;
@@ -183,6 +186,21 @@ export class Entities {
       }
     }
     if (m.hitWall) m.input.jump = true;
+  }
+
+  // Entity.push: caixas que se sobrepõem se afastam 0,05/tick (mob–mob e mob–jogador; o jogador não é empurrado)
+  push(m, p) {
+    const away = (x, z, r) => {
+      let dx = m.pos.x - x, dz = m.pos.z - z;
+      let d = Math.max(Math.abs(dx), Math.abs(dz));
+      if (d >= r || d < 0.01) return;
+      d = Math.sqrt(d);
+      const k = Math.min(1, 1 / d) * 0.05 / d;
+      m.motion.x += dx * k;
+      m.motion.z += dz * k;
+    };
+    if (p.alive !== false && Math.abs(p.pos.y - m.pos.y) < 1.8) away(p.pos.x, p.pos.z, m.t.w / 2 + 0.3);
+    for (const o of this.mobs) if (o !== m && !o.dead && Math.abs(o.pos.y - m.pos.y) < 1.8) away(o.pos.x, o.pos.z, (m.t.w + o.t.w) / 2);
   }
 
   sight(m, p) {

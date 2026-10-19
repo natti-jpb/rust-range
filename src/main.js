@@ -129,7 +129,7 @@ player.alive = true;
 
 // ---------- vida, dano, morte ----------
 function hurtPlayer(dmg) {
-  if (!player.alive || dmg <= 0) return;
+  if (!player.alive || dmg <= 0 || settings.godMode) return; // god mode: nada machuca o jogador
   player.hp = Math.max(0, player.hp - dmg);
   hud.hurt(dmg);
   hud.health(player.hp);
@@ -431,10 +431,12 @@ const menu = new Menu({
     if (k === 'showTrainer') hud.trainerVisible(settings.showTrainer);
     if (k === 'lang') { hud.texts(); invui.texts(); }
     if (k === 'mobs') entities.enabled = settings.mobs;
+    if (k === 'peacefulMobs') entities.peaceful = settings.peacefulMobs;
     if (k === 'infiniteAmmo') weapons.ui();
   },
 });
 entities.enabled = settings.mobs !== false;
+entities.peaceful = !!settings.peacefulMobs;
 menu.local = !!manifest;
 menu.texts();
 hud.texts();
