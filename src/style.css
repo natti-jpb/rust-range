@@ -107,6 +107,11 @@ summary { cursor: pointer; font-size: 14px; font-weight: 700; }
 footer { margin-top: 16px; font-size: 11px; color: #7d7568; line-height: 1.45; }
 #touchwarn { color: var(--rust2); font-size: 13px; }
 
+/* menu maior em telas altas (zoom mantém o layout) */
+@media (min-height: 760px) { #menu .panel { width: min(640px, 100%); zoom: 1.2; max-height: calc((100vh - 32px) / 1.2); } }
+@media (min-height: 960px) { #menu .panel { zoom: 1.45; max-height: calc((100vh - 32px) / 1.45); } }
+@media (min-height: 1200px) { #menu .panel { zoom: 1.75; max-height: calc((100vh - 32px) / 1.75); } }
+
 @media (max-width: 560px) {
   .settings label { grid-template-columns: 1fr 1fr 40px; }
   .panel header h1 { font-size: 30px; }

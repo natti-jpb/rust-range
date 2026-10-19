@@ -419,7 +419,8 @@ const menu = new Menu({
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
       // Em tela cheia, segura atalhos tipo Ctrl+W (agachar + andar)
-      await navigator.keyboard?.lock?.(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyT', 'KeyQ', 'Space', 'ControlLeft', 'ShiftLeft']);
+      // Escape incluso: em tela cheia o Esc chega como tecla normal e abre/fecha o menu sem sair da tela cheia
+      await navigator.keyboard?.lock?.(['Escape', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyT', 'KeyE', 'KeyF', 'Space', 'ControlLeft', 'ShiftLeft']);
     } catch { /* sem tela cheia: segue */ }
     player.lock();
   },
@@ -430,6 +431,7 @@ const menu = new Menu({
     if (k === 'showTrainer') hud.trainerVisible(settings.showTrainer);
     if (k === 'lang') { hud.texts(); invui.texts(); }
     if (k === 'mobs') entities.enabled = settings.mobs;
+    if (k === 'infiniteAmmo') weapons.ui();
   },
 });
 entities.enabled = settings.mobs !== false;
@@ -437,12 +439,20 @@ menu.local = !!manifest;
 menu.texts();
 hud.texts();
 
+let menuShownAt = 0;
 player.onLockChange = (locked) => {
   invui.hud(locked || invui.open);
   if (!locked && invui.open) return; // inventário aberto: cursor livre, jogo segue
+  if (!locked) menuShownAt = performance.now();
   menu.show(!locked);
   hud.show(locked);
 };
+// Esc com o menu aberto volta ao jogo. O pointer lock aceita o pedido sem gesto quando a última saída
+// foi por exitPointerLock() (Esc no jogo em tela cheia, Tab/E do inventário)
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Escape' || menu.el.hidden || !menu.started || invui.open || performance.now() - menuShownAt < 300) return;
+  player.lock();
+});
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -477,9 +487,10 @@ function frame(ts) {
   now += dt;
   const inp = player.consume();
   if (invui.open) {
-    if (inp.pressed.has('Tab')) closeInv();
-    else if (inp.pressed.has('Escape') || !player.alive) closeInv(false);
+    if (inp.pressed.has('Tab') || inp.pressed.has('Escape')) closeInv(); // como no Rust: Tab/Esc voltam ao jogo
+    else if (!player.alive) closeInv(false);
   } else if (player.locked && player.alive) {
+    if (inp.pressed.has('Escape')) document.exitPointerLock(); // abre o menu (onLockChange)
     if (inp.pressed.has('Tab')) openInv();
     if (inp.pressed.has('KeyT')) { weapons.setMode(settings.mode === 'legacy' ? 'current' : 'legacy'); menu.refresh(); }
     if (inp.pressed.has('KeyX')) ballistics.fx.clearWall();

@@ -42,6 +42,7 @@ export class Menu {
     bind('adsToggle', 'adsToggle', String);
     bind('showTrainer', 'showTrainer', String);
     bind('mobs', 'mobs', String);
+    bind('infiniteAmmo', 'infiniteAmmo', String);
     bind('lang', 'lang', String);
     if (!settings.lang) $('lang').checked = !navigator.language?.startsWith('pt');
     this.texts();

@@ -21,7 +21,7 @@ export const GUNS = WEAPONS.map((w) => ({ ...w, ...META[w.id] }));
 export const gun = (id) => GUNS.find((g) => g.id === id);
 
 const KEY = 'rustrange:settings';
-const DEFAULTS = { sens: 0.5, fov: 90, vol: 0.7, mode: 'legacy', adsToggle: false, showTrainer: true, mobs: true, lang: null, weapon: 'rifle.ak' };
+const DEFAULTS = { sens: 0.5, fov: 90, vol: 0.7, mode: 'legacy', adsToggle: false, showTrainer: true, mobs: true, infiniteAmmo: true, lang: null, weapon: 'rifle.ak' };
 
 function load() {
   try {

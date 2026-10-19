@@ -14,15 +14,16 @@ const CSS = (base) => `
   color: #f7ebe1; user-select: none; -webkit-user-select: none; }
 #inv { position: fixed; inset: 0; z-index: 5; }
 #inv[hidden] { display: none; }
-#inv .menu { position: absolute; inset: calc(17.5 * var(--k)); transform: translateX(calc(-8 * var(--k)));
-  background: rgba(29, 32, 31, 0.94) ${base ? `url(${base}hud/UI.Background.Tile.png)` : ''}; background-size: calc(256 * var(--k));
-  background-blend-mode: multiply; } /* Image.color tinge o sprite do tile */
+/* translúcido: o jogo continua visível (e jogável) atrás do inventário */
+#inv .menu { position: absolute; inset: calc(17.5 * var(--k)); transform: translateX(calc(-8 * var(--k))); background: rgba(16, 18, 17, 0.42); }
 #inv .cont { position: absolute; left: 50%; bottom: calc(64 * var(--k)); width: calc(1161 * var(--k)); height: calc(571 * var(--k));
   transform: translateX(-50%); }
 #inv .tile { background-color: rgba(247, 235, 225, 0.04); }
 #inv .tile2 { background-color: rgba(247, 235, 225, 0.078); }
+#inv .ipanel { box-sizing: border-box; }
 #inv .loadout { position: absolute; left: 0; top: 0; bottom: 0; width: calc(380 * var(--k)); display: flex; flex-direction: column;
-  gap: calc(2 * var(--k)); padding-bottom: calc(35 * var(--k)); background: rgba(29, 32, 31, 0.56); }
+  gap: calc(2 * var(--k)); padding-bottom: calc(35 * var(--k)); background: rgba(29, 32, 31, 0.5); }
+#inv .grid, #inv .sel, #inv .right { background: rgba(29, 32, 31, 0.55); }
 #inv .pname { height: calc(24 * var(--k)); font-size: calc(20 * var(--k)); text-transform: uppercase; padding-left: calc(4 * var(--k)); }
 #inv .model { flex: 1; }
 #inv .wear { display: flex; justify-content: center; gap: 0; }
@@ -57,7 +58,8 @@ const CSS = (base) => `
   background: rgba(247, 235, 225, 0.08); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #inv .opt:hover { background: rgba(247, 235, 225, 0.16); }
 #inv .opt.on { background: rgba(31, 107, 160, 0.78); }
-#inv .right { position: absolute; right: 0; top: calc(16.5 * var(--k)); bottom: calc(-6.5 * var(--k)); width: calc(380 * var(--k)); }
+/* Right: altura = Container − 23, pivô no meio deslocado +16,5 → de −5 (topo) a 28 (base) */
+#inv .right { position: absolute; right: 0; top: calc(-5 * var(--k)); bottom: calc(28 * var(--k)); width: calc(380 * var(--k)); overflow: hidden; }
 #inv .right[hidden] { display: none; }
 #inv .loot .cells { display: grid; grid-template-columns: repeat(6, calc(60 * var(--k))); justify-content: center; padding: calc(4 * var(--k)) 0; }
 #inv .loot .cell { width: calc(60 * var(--k)); height: calc(60 * var(--k)); }
@@ -101,10 +103,10 @@ export class InventoryUI {
     this.el.id = 'inv';
     this.el.hidden = true;
     this.el.innerHTML = `<div class="menu"><div class="cont">
-      <div class="loadout panel"><div class="pname"></div><div class="model tile"></div><div class="wear">${'<div class="cell"></div>'.repeat(7)}</div></div>
-      <div class="sel panel tile" hidden></div>
-      <div class="grid panel"><div class="label"></div><div class="cells"></div></div>
-      <div class="right panel" hidden><div class="loot"><div class="hdr tile2"></div><div class="cells tile"></div></div></div>
+      <div class="loadout ipanel"><div class="pname"></div><div class="model tile"></div><div class="wear">${'<div class="cell"></div>'.repeat(7)}</div></div>
+      <div class="sel ipanel tile" hidden></div>
+      <div class="grid ipanel"><div class="label"></div><div class="cells"></div></div>
+      <div class="right ipanel" hidden><div class="loot"><div class="hdr tile2"></div><div class="cells tile"></div></div></div>
     </div></div>`;
     document.body.append(this.el);
     this.belt = document.createElement('div');
@@ -328,7 +330,7 @@ export class InventoryUI {
       // mod solto em cima de uma arma: instala no primeiro slot que aceitar
       if (kind(it.id) === 'mod' && target?.mods && !dst.accept) this.inv.attach(src, p.i, target);
       else if (this.inv.move(src, p.i, dst, s.i, n) && this.selected?.c === p.c && this.selected.i === p.i && kind(it.id) !== 'mod') this.selected = { c: s.c, i: s.i };
-    } else if (!document.elementFromPoint(e.clientX, e.clientY)?.closest('.panel, #belt')) {
+    } else if (!document.elementFromPoint(e.clientX, e.clientY)?.closest('.ipanel, #belt')) {
       // fora dos painéis: solta no mundo
       src.slots[p.i] = null;
       if (this.selected?.c === p.c && this.selected.i === p.i) this.selected = null;

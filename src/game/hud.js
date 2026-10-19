@@ -37,7 +37,7 @@ export class Hud {
     if (!item) return;
     $('wname').textContent = w.name;
     $('mag').textContent = item.ammo;
-    $('reserve').textContent = `/ ${reserve}`;
+    $('reserve').textContent = `/ ${reserve}`; // '∞' com munição infinita
     $('ammo').classList.toggle('empty', item.ammo === 0);
   }
 

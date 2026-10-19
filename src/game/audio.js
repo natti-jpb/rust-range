@@ -1,4 +1,6 @@
-// Sons sintetizados com WebAudio (nenhum áudio do jogo).
+import { settings } from './config.js';
+
+// Sons sintetizados com WebAudio; com os assets locais, toca os do Rust/Minecraft (RustSounds, McSounds).
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -76,7 +78,9 @@ export class Audio {
 
   shot(w) {
     if (!this.ctx) return;
-    const info = this.manifest?.weapons[w.id];
+    const cur = this.manifest?.weapons[w.id];
+    // modo legado: sons de tiro do build anterior ao Combat Update (jun/2022), se exportados (legacy=...)
+    const info = settings.mode === 'legacy' && cur?.legacySounds?.attack ? { ...cur, sounds: { ...cur.sounds, ...cur.legacySounds } } : cur;
     // silenciador: attack_silenced (ou a variante do filtro de óleo / lata, se a arma tiver)
     const sil = w.silencer && ['attack_silenced' + (w.silencer.includes('oilfilter') ? '_oilfilter' : w.silencer.includes('sodacan') ? '_sodacan' : ''), 'attack_silenced']
       .find((n) => this.rust?.has(info, n));

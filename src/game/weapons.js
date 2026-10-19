@@ -73,7 +73,8 @@ export class Weapons {
     this.item.rs.capacity = this.w.capacity;
     // pente menor (tirou o extended mag): o excedente volta para o inventário (DelayedModsChanged)
     const extra = this.item.ammo - this.w.capacity;
-    if (extra > 0) {
+    if (extra > 0 && settings.infiniteAmmo) this.item.ammo = this.w.capacity;
+    else if (extra > 0) {
       this.item.ammo = this.w.capacity;
       const back = makeItem(this.item.ammoType, extra);
       if (!this.inv.give(back)) this.onOverflow?.(back);
@@ -81,7 +82,7 @@ export class Weapons {
     return this.w;
   }
 
-  ui() { if (this.item) this.hud.weapon(this.w, this.item, this.inv.count(this.item.ammoType)); }
+  ui() { if (this.item) this.hud.weapon(this.w, this.item, settings.infiniteAmmo ? '∞' : this.inv.count(this.item.ammoType)); }
 
   // painel do padrão: só redesenha quando o caminho muda (pente/mods/modo), senão apagaria os tiros
   pattern(force = false) {
@@ -114,7 +115,7 @@ export class Weapons {
   // TryReload: usa o tipo selecionado; sem ele no inventário, troca para outro do mesmo calibre
   reloadType() {
     const it = this.item;
-    if (this.inv.count(it.ammoType) > 0) return it.ammoType;
+    if (settings.infiniteAmmo || this.inv.count(it.ammoType) > 0) return it.ammoType;
     return ammoTypes(gun(it.id)).find((a) => this.inv.count(a) > 0) ?? null;
   }
 
@@ -129,7 +130,8 @@ export class Weapons {
   finishReload() {
     const it = this.item, type = this.reload.type;
     if (type !== it.ammoType) { this.unload(it); it.ammoType = type; }
-    it.ammo += this.inv.take(type, this.w.capacity - it.ammo);
+    // munição infinita: o pente enche sem tirar do inventário
+    it.ammo += settings.infiniteAmmo ? this.w.capacity - it.ammo : this.inv.take(type, this.w.capacity - it.ammo);
     this.reload = null;
     this.ui();
   }
@@ -137,6 +139,7 @@ export class Weapons {
   // devolve o pente ao inventário (opção "Unload Ammo")
   unload(it) {
     if (!it.ammo) return;
+    if (settings.infiniteAmmo) { it.ammo = 0; if (it === this.item) this.ui(); return; }
     const back = makeItem(it.ammoType, it.ammo);
     it.ammo = 0;
     if (!this.inv.give(back)) this.onOverflow?.(back);

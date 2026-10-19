@@ -3,7 +3,7 @@
 USO LOCAL APENAS: os arquivos gerados são conteúdo da Facepunch, tirados da sua cópia do jogo.
 public/rust-assets/ está no .gitignore e no .vercelignore — não publique.
 
-    python -I tools/extract/export_assets.py "<pasta do Rust>" public/rust-assets [ids...]
+    python -I tools/extract/export_assets.py "<pasta do Rust>" public/rust-assets [ids...] [legacy=<Rust de maio/2022>]
 """
 import base64
 import io
@@ -645,6 +645,31 @@ def export_sound_def(obj, out_dir, done):
     return {'name': d['m_Name'], 'files': files, **keep}
 
 
+def export_legacy_sounds(old_rust, out_dir, manifest):
+    """Sons de tiro de um build antigo do Rust (antes do Combat Update de 02/06/2022, quando trocaram junto com o
+    recoil) para o modo legado. Vão para <out>/legacy/snd e entram em manifest.weapons[id].legacySounds."""
+    env2 = RustEnv(old_rust)
+    scene = next((n for n in env2.index if 'assetscene' in n and n.endswith('prefabs')), None)
+    sf2 = env2.open(scene) if scene else None
+    if sf2 is None:
+        raise SystemExit(f'asset scene de prefabs não encontrada em {old_rust}')
+    root = os.path.join(out_dir, 'legacy')
+    os.makedirs(os.path.join(root, 'snd'), exist_ok=True)
+    done = set()
+    for wid, prefab in VIEWMODELS.items():
+        folder = prefab.rsplit('/', 1)[0]
+        snd = {}
+        for name in ('attack', 'attack_silenced', 'attack_silenced_oilfilter', 'attack_silenced_sodacan'):
+            defs = [export_sound_def(o, root, done) for o in sound_defs_of_prefab(sf2, f'{folder}/effects/{name}.prefab')]
+            for d in defs:
+                d['files'] = [['legacy/' + f, w] for f, w in d['files']]
+            if defs:
+                snd[name] = defs
+        if wid in manifest['weapons']:
+            manifest['weapons'][wid]['legacySounds'] = snd
+        print('   legado', wid, list(snd))
+
+
 def export_sounds(prefab_sf, info, out_dir, done):
     os.makedirs(os.path.join(out_dir, 'snd'), exist_ok=True)
     folder = info['prefab'].rsplit('/', 1)[0]
@@ -822,8 +847,12 @@ def main(rust, out_dir, ids):
     arms = arms_source(sf)
     manifest_path = os.path.join(out_dir, 'manifest.json')
     manifest = json.load(open(manifest_path)) if os.path.exists(manifest_path) else {'weapons': {}}
-    targets = ids or ['hud', 'mods', 'fx', *VIEWMODELS]
+    legacy = [t.split('=', 1)[1] for t in ids if t.startswith('legacy=')]  # legacy=<pasta do Rust de 2022>
+    ids = [t for t in ids if not t.startswith('legacy=')]
+    targets = ids or ([] if legacy else ['hud', 'mods', 'fx', *VIEWMODELS])
     done = set()
+    for old in legacy:
+        export_legacy_sounds(old, out_dir, manifest)
     if 'fx' in targets:
         manifest['fx'] = export_fx(env, sf, out_dir)
     if 'mods' in targets:

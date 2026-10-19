@@ -64,6 +64,10 @@ python -I tools/extract/export_mc.py client.jar <índice de assets>.json public/
 - Sai em `public/mc-assets/` (~1,5 MB), fora do git, da Vercel e do `dist/`. Sem a pasta, o jogo usa as texturas procedurais.
 - Do lado do Rust, `export_assets.py … fx` exporta o muzzle flash (atlas 3×3), o traçante do `riflebullet` e os decais de furo por material; `hud mods` exporta também os sons de pegar/soltar de cada item e o de dano do jogador.
 
+### Sons de tiro legados
+
+Os sons das armas mudaram no Combat Update (02/06/2022), junto com o recoil, e a instalação atual não guarda os antigos. Com um build de maio/2022 (depot 252494 do app 252490, baixado com a sua conta Steam), `export_assets.py … legacy=<pasta desse build>` exporta os `attack*.prefab` antigos para `rust-assets/legacy/`; no modo legado o jogo passa a usá-los.
+
 ## Rodar
 
 ```bash
@@ -71,4 +75,4 @@ npm install
 npm run dev
 ```
 
-Controles: WASD, Shift correr, C/Ctrl agachar, Espaço pular, botão direito ADS, R recarregar, Tab inventário (arrastar; botão direito move rápido; Shift divide), 1–6/roda belt, E abrir baú/pegar item, F laser/lanterna/burst, roda no ADS zoom da luneta variável, T recoil, X limpar furos, P painel, Esc menu.
+Controles: WASD, Shift correr, C/Ctrl agachar, Espaço pular, botão direito ADS, R recarregar, Tab inventário (arrastar; botão direito move rápido; Shift divide), 1–6/roda belt, E abrir baú/pegar item, F laser/lanterna/burst, roda no ADS zoom da luneta variável, T recoil, X limpar furos, P painel, Esc abre/fecha o menu (em tela cheia) e fecha o inventário.
