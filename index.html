@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rust Range — recoil legado</title>
+  <meta name="description" content="Shooting range no navegador com o recoil antigo do Rust (2017–2022), reconstruído a partir dos arquivos do jogo." />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="crosshair"></div>
+    <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+    <div id="mode"></div>
+    <div id="hints"></div>
+    <div id="hitinfo"></div>
+    <div id="dmg"></div>
+    <canvas id="trainer" width="240" height="300"></canvas>
+    <div id="weapon">
+      <div id="wname"></div>
+      <div id="ammo"><b id="mag"></b><span>/ ∞</span></div>
+      <div id="reload"><i></i></div>
+    </div>
+  </div>
+
+  <div id="menu">
+    <div class="panel">
+      <header>
+        <h1>RUST RANGE</h1>
+        <p data-t="tagline"></p>
+      </header>
+      <button id="play" class="primary" data-t="play"></button>
+      <p id="touchwarn" data-t="touch" hidden></p>
+
+      <section>
+        <h2 data-t="recoil"></h2>
+        <div class="seg" id="modeSeg">
+          <button data-mode="legacy" data-t="legacy"></button>
+          <button data-mode="current" data-t="current"></button>
+        </div>
+        <p class="note" id="modeNote"></p>
+      </section>
+
+      <section>
+        <h2 data-t="weapon"></h2>
+        <div id="weaponGrid"></div>
+      </section>
+
+      <section class="settings">
+        <h2 data-t="settings"></h2>
+        <label><span data-t="sens"></span><input id="sens" type="range" min="0.05" max="2" step="0.01" /><output id="sensOut"></output></label>
+        <label><span data-t="fov"></span><input id="fov" type="range" min="70" max="90" step="1" /><output id="fovOut"></output></label>
+        <label><span data-t="volume"></span><input id="vol" type="range" min="0" max="1" step="0.01" /><output id="volOut"></output></label>
+        <label class="check"><input id="adsToggle" type="checkbox" /><span data-t="adsToggle"></span></label>
+        <label class="check"><input id="showTrainer" type="checkbox" /><span data-t="showTrainer"></span></label>
+        <label class="check"><input id="lang" type="checkbox" /><span>English</span></label>
+      </section>
+
+      <details>
+        <summary data-t="howTitle"></summary>
+        <div id="how"></div>
+      </details>
+      <footer data-t="disclaimer"></footer>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

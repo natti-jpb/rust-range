@@ -1,0 +1,96 @@
+:root {
+  --ink: #e8e2d6;
+  --dim: #a59d8e;
+  --panel: rgba(28, 26, 23, 0.92);
+  --line: rgba(232, 226, 214, 0.14);
+  --rust: #cd412b;
+  --rust2: #e2563d;
+  --ok: #8fb35b;
+  font-family: 'Roboto Condensed', 'Arial Narrow', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #111; color: var(--ink); overflow: hidden; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+  border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+#crosshair.ads { opacity: 0; }
+#hitmarker { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 0; }
+#hitmarker i { position: absolute; width: 7px; height: 2px; background: #fff; box-shadow: 0 0 2px #000; }
+#hitmarker i:nth-child(1) { left: 0; top: 3px; transform: rotate(45deg); }
+#hitmarker i:nth-child(2) { right: 0; top: 3px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(3) { left: 0; bottom: 3px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(4) { right: 0; bottom: 3px; transform: rotate(45deg); }
+#hitmarker.show { animation: hm 0.28s ease-out; }
+#hitmarker.head i { background: var(--rust2); }
+@keyframes hm { 0% { opacity: 1; transform: scale(1.25); } 100% { opacity: 0; transform: scale(1); } }
+
+#mode { position: absolute; left: 16px; top: 14px; padding: 6px 10px; font-weight: 700; letter-spacing: 0.06em;
+  font-size: 13px; background: rgba(0, 0, 0, 0.45); border-left: 3px solid var(--rust); text-transform: uppercase; }
+#mode.current { border-left-color: #6d8fb3; }
+#hints { position: absolute; left: 16px; top: 46px; font-size: 12px; color: #cfc8ba; line-height: 1.6; padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.38); text-shadow: 0 1px 2px #000; }
+#hints b { color: var(--ink); font-weight: 600; }
+#hitinfo { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); font-size: 13px;
+  text-shadow: 0 1px 2px #000; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+#hitinfo.show { opacity: 1; transition: none; }
+#dmg span { position: absolute; font-weight: 700; font-size: 15px; color: #fff; text-shadow: 0 1px 3px #000;
+  transform: translate(-50%, -50%); animation: dmg 0.9s ease-out forwards; }
+#dmg span.head { color: var(--rust2); font-size: 17px; }
+@keyframes dmg { 0% { opacity: 1; margin-top: 0; } 100% { opacity: 0; margin-top: -36px; } }
+
+#trainer { position: absolute; left: 16px; bottom: 16px; width: 240px; height: 300px; background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--line); }
+#trainer[hidden] { display: none; }
+#weapon { position: absolute; right: 22px; bottom: 18px; text-align: right; text-shadow: 0 1px 3px #000; }
+#wname { font-size: 14px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+#ammo { font-size: 15px; color: var(--dim); }
+#ammo b { font-size: 38px; color: var(--ink); font-weight: 700; margin-right: 6px; }
+#ammo.empty b { color: var(--rust2); }
+#reload { margin-top: 4px; height: 4px; width: 160px; margin-left: auto; background: rgba(255, 255, 255, 0.15); opacity: 0; }
+#reload.on { opacity: 1; }
+#reload i { display: block; height: 100%; width: 0; background: var(--ink); }
+
+/* Menu */
+#menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(10, 9, 8, 0.35), rgba(10, 9, 8, 0.82)); overflow: auto; }
+#menu[hidden] { display: none; }
+.panel { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel);
+  border: 1px solid var(--line); padding: 22px 24px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
+.panel header h1 { margin: 0; font-size: 40px; letter-spacing: 0.08em; font-weight: 800; }
+.panel header p { margin: 4px 0 16px; color: var(--dim); font-size: 14px; }
+.panel h2 { margin: 18px 0 8px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+button { font: inherit; color: var(--ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  padding: 8px 12px; cursor: pointer; }
+button:hover { background: rgba(255, 255, 255, 0.12); }
+button.primary { width: 100%; padding: 14px; font-size: 18px; font-weight: 800; letter-spacing: 0.12em;
+  background: var(--rust); border-color: var(--rust); }
+button.primary:hover { background: var(--rust2); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg button.on { background: var(--rust); border-color: var(--rust); font-weight: 700; }
+.seg button[data-mode='current'].on { background: #4f6d8c; border-color: #4f6d8c; }
+.note { margin: 8px 0 0; font-size: 13px; color: var(--dim); line-height: 1.45; }
+#weaponGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+#weaponGrid button { text-align: left; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+#weaponGrid button kbd { color: var(--dim); font-family: inherit; }
+#weaponGrid button.on { border-color: var(--ink); background: rgba(255, 255, 255, 0.14); }
+.settings label { display: grid; grid-template-columns: 150px 1fr 46px; align-items: center; gap: 10px; margin: 6px 0;
+  font-size: 14px; }
+.settings label.check { grid-template-columns: 20px 1fr; cursor: pointer; }
+.settings output { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+input[type='range'] { accent-color: var(--rust); width: 100%; }
+input[type='checkbox'] { accent-color: var(--rust); width: 16px; height: 16px; }
+details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+summary { cursor: pointer; font-size: 14px; font-weight: 700; }
+#how { font-size: 13px; line-height: 1.55; color: var(--dim); }
+#how code { color: var(--ink); font-size: 12px; }
+#how li { margin: 4px 0; }
+footer { margin-top: 16px; font-size: 11px; color: #7d7568; line-height: 1.45; }
+#touchwarn { color: var(--rust2); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .settings label { grid-template-columns: 1fr 1fr 40px; }
+  .panel header h1 { font-size: 30px; }
+}
