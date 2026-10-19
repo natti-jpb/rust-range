@@ -379,7 +379,8 @@ export class Entities {
   }
 
   // ---------- explosão (Explosion: blocos numa esfera irregular + dano por distância) ----------
-  explode(c, power, source) {
+  // small: munição explosiva (sem o estrondo do Minecraft)
+  explode(c, power, source, small = false) {
     const r = power * 1.1;
     const ix = Math.floor(c.x), iy = Math.floor(c.y), iz = Math.floor(c.z);
     const R = Math.ceil(r);
@@ -388,7 +389,7 @@ export class Entities {
       if (d > r * (0.7 + Math.random() * 0.45)) continue;
       const bx = ix + x, by = iy + y, bz = iz + z;
       const id = this.world.get(bx, by, bz);
-      if (!id || id === B.BEDROCK || BLOCKS[id].liquid) continue;
+      if (!id || id === B.BEDROCK || BLOCKS[id].liquid || BLOCKS[id].container) continue;
       if (id === B.TNT) { this.primeTnt(bx, by, bz, 10 + (Math.random() * 20) | 0); continue; }
       this.world.set(bx, by, bz, B.AIR);
     }
@@ -407,13 +408,13 @@ export class Entities {
       const md = hurt(m.pos, m.t.h);
       if (md > 0) this.damage(m, md * HP, source, new THREE.Vector3().subVectors(m.pos, c));
     }
-    this.hooks.sound('explode', c);
-    this.hooks.fx('explosion', c);
+    this.hooks.sound(small ? 'explode_small' : 'explode', c);
+    this.hooks.fx(small ? 'explosion_small' : 'explosion', c);
   }
 
   // ---------- itens no chão ----------
-  dropItem(pos, item, mesh) {
-    const it = { pos: pos.clone(), prev: pos.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2), item, mesh, age: 0 };
+  dropItem(pos, item, mesh, vel = null) {
+    const it = { pos: pos.clone(), prev: pos.clone(), vel: vel ?? new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2), item, mesh, age: 0 };
     this.scene.add(mesh);
     this.items.push(it);
   }

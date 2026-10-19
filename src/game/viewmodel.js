@@ -239,6 +239,8 @@ export class ViewModel {
 
   show(w) {
     this.root.clear();
+    this.cur = null;
+    if (!w) return;
     this.cur = this.get(w.model);
     this.root.add(this.cur.group);
     this.cur.group.add(this.flash);

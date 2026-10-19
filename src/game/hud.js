@@ -30,12 +30,29 @@ export class Hud {
     el.classList.toggle('current', m !== 'legacy');
   }
 
-  weapon(w, g) {
-    this.w = w;
+  // item: arma na mão (null = mão vazia); reserve = munição do tipo carregado no inventário
+  weapon(w, item, reserve = 0) {
+    this.w = w ?? this.w;
+    $('weapon').hidden = !item;
+    if (!item) return;
     $('wname').textContent = w.name;
-    $('mag').textContent = g.ammo;
-    $('ammo').classList.toggle('empty', g.ammo === 0);
-    if (this.rust && this.states) this.rust.weapon(w, this.states);
+    $('mag').textContent = item.ammo;
+    $('reserve').textContent = `/ ${reserve}`;
+    $('ammo').classList.toggle('empty', item.ammo === 0);
+  }
+
+  // [E] abrir / pegar
+  prompt(text) {
+    const el = $('prompt');
+    el.hidden = !text;
+    if (text) el.textContent = text;
+  }
+
+  // overlay da luneta (ViewmodelScope.scopeMaterialOverride) por cima de tudo quando o ADS completa
+  scope(src) {
+    const el = $('scope');
+    el.hidden = !src;
+    if (src && el.dataset.src !== src) { el.dataset.src = src; el.querySelector('img').src = src; }
   }
 
   reload(p) {
@@ -58,6 +75,13 @@ export class Hud {
   dead(on) { $('dead').hidden = !on; }
 
   ads(on) { $('crosshair').classList.toggle('ads', on); this.rust?.ads(on); }
+
+  // ponto do laser (posição de tela) — o laser do Rust marca onde a mira aponta
+  laser(p) {
+    const el = $('laser');
+    el.hidden = !p;
+    if (p) { el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; }
+  }
 
   hitmarker(head) {
     const h = $('hitmarker');

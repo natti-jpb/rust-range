@@ -37,6 +37,19 @@ VIEWMODELS = {
     'pistol.semiauto': 'assets/prefabs/weapons/semi auto pistol/pistol_semiauto.viewmodel.prefab',
     'pistol.m92': 'assets/prefabs/weapons/m92/m92.viewmodel.prefab',
 }
+# attachments com modelo no viewmodel: shortname -> prefab base em assets/prefabs/weapon mods/
+MOD_VM = {
+    'weapon.mod.holosight': 'holosight/holosight', 'weapon.mod.8x.scope': '8x scope/8xscope',
+    'weapon.mod.small.scope': 'smallscope/smallscope', 'weapon.mod.simplesight': 'reddotsight/simplesight',
+    'weapon.mod.lasersight': 'lasersight/lasersight', 'weapon.mod.flashlight': 'flashlight/flashlight',
+    'weapon.mod.silencer': 'silencers/silencer', 'weapon.mod.oilfiltersilencer': 'silencers/oilfiltersilencer',
+    'weapon.mod.sodacansilencer': 'silencers/sodacansilencer', 'weapon.mod.muzzlebrake': 'muzzlebrake/muzzlebrake',
+    'weapon.mod.muzzleboost': 'muzzleboost/muzzleboost',
+}
+ITEMS_EXTRA = ['weapon.mod.extendedmags', 'weapon.mod.burstmodule', 'weapon.mod.gascompressionovedrive',
+               'ammo.rifle', 'ammo.rifle.hv', 'ammo.rifle.incendiary', 'ammo.rifle.explosive',
+               'ammo.pistol', 'ammo.pistol.hv', 'ammo.pistol.fire']
+QUAD_ID = 10210  # Quad embutido da Unity ('unity default resources')
 ARMS_PREFAB = 'assets/prefabs/instruments/flute/flute.viewmodel.prefab'  # braços nus genéricos (hand_mesh)
 TEX_MAX = 1024
 SKIN_TONE = (0.92, 0.72, 0.6, 1.0)  # tom de pele médio (o jogo escolhe por jogador)
@@ -200,6 +213,7 @@ def export_material(glb, mat_pptr, cache):
     albedo, _ = tex_rgba(first(texs, ['_MainTex', '_BaseColorMap', '_BaseMap', '_AlbedoMap']))
     normal, _ = tex_rgba(first(texs, ['_BumpMap', '_NormalMap']))
     sg, _ = tex_rgba(first(texs, ['_SpecGlossMap', '_SpecularMap']))
+    mg, _ = tex_rgba(first(texs, ['_MetallicGlossMap']))
     ao, _ = tex_rgba(first(texs, ['_OcclusionMap']))
 
     out = {'name': m.m_Name, 'pbrMetallicRoughness': {'metallicFactor': 1.0, 'roughnessFactor': 1.0}}
@@ -221,13 +235,20 @@ def export_material(glb, mat_pptr, cache):
         metal = np.clip((lum - 0.12) / (0.45 - 0.12), 0, 1)
         rgb = rgb * (1 - metal[..., None]) + spec * metal[..., None]
         rough = 1 - gloss
+    elif mg is not None:
+        # fluxo metálico: R = metal, A = suavidade
+        mg = fit(mg, shape)
+        metal = mg[..., 0]
+        rough = 1 - mg[..., 3] * floats.get('_GlossMapScale', floats.get('_Glossiness', 1.0))
     else:
         metal = np.zeros(shape, np.float32)
         rough = np.full(shape, 1 - floats.get('_Glossiness', 0.3), np.float32)
     occ = fit(ao, shape)[..., 1] if ao is not None else np.ones(shape, np.float32)
     cutout = '_ALPHATEST_ON' in keywords
-    base = np.concatenate([rgb, albedo[..., 3:4]], -1) if cutout else rgb
-    data, mime = encode(base, png=cutout)
+    blend = '_ALPHABLEND_ON' in keywords or '_ALPHAPREMULTIPLY_ON' in keywords
+    alpha = albedo[..., 3:4] * (tint[3] if blend else 1)
+    base = np.concatenate([rgb, alpha], -1) if cutout or blend else rgb
+    data, mime = encode(base, png=cutout or blend)
     out['pbrMetallicRoughness']['baseColorTexture'] = {'index': glb.image(data, mime)}
     orm_i = glb.image(*encode(np.stack([occ, rough, metal], -1)))
     out['pbrMetallicRoughness']['metallicRoughnessTexture'] = {'index': orm_i}
@@ -238,6 +259,14 @@ def export_material(glb, mat_pptr, cache):
     if cutout:
         out['alphaMode'] = 'MASK'
         out['alphaCutoff'] = floats.get('_Cutoff', 0.5)
+    elif blend:
+        out['alphaMode'] = 'BLEND'
+    ec = np.clip(colors.get('_EmissionColor', (0, 0, 0, 1))[:3], 0, 1)
+    if '_EMISSION' in keywords and ec.max() > 0:
+        out['emissiveFactor'] = [float(x) for x in ec]
+        em, _ = tex_rgba(first(texs, ['_EmissionMap']))
+        if em is not None:
+            out['emissiveTexture'] = {'index': glb.image(*encode(em[..., :3]))}
     cache[key] = glb.material(out)
     return cache[key]
 
@@ -287,6 +316,92 @@ def export_smr(glb, tree, smr, bone_nodes, mesh_world, cache, name):
     if joints is not None and bone_nodes:
         skin = glb.skin(bone_nodes, np.array([m.T.reshape(-1) for m in ibm]))
     return mi, skin
+
+
+def export_static(glb, mf, mr, cache, name):
+    """MeshFilter + MeshRenderer no espaço local do nó (attachments não têm skin)."""
+    pp = mf.read().m_Mesh
+    try:
+        mesh = pp.read()
+    except FileNotFoundError:
+        if pp.path_id != QUAD_ID:
+            return None
+        pos = np.array([[-.5, -.5, 0], [.5, -.5, 0], [-.5, .5, 0], [.5, .5, 0]])
+        nrm, uv = np.tile([0, 0, -1.0], (4, 1)), np.array([[0, 0], [1, 0], [0, 1], [1, 1.0]])
+        subs = [np.array([[0, 3, 1], [3, 0, 2]])]
+    else:
+        h = MeshHandler(mesh)
+        h.process()
+        pos = np.array(h.m_Vertices, np.float64)[:, :3]
+        nrm = np.array(h.m_Normals, np.float64)[:, :3] if h.m_Normals else np.zeros_like(pos)
+        uv = np.array(h.m_UV0, np.float64)[:, :2] if h.m_UV0 else None
+        subs = [np.array(t, np.int64).reshape(-1, 3) + (getattr(sm, 'baseVertex', 0) or 0)
+                for sm, t in zip(mesh.m_SubMeshes, h.get_triangles())]
+    pos, nrm = pos.copy(), nrm.copy()
+    pos[:, 2] *= -1
+    nrm[:, 2] *= -1
+    if uv is not None:
+        uv = uv.copy()
+        uv[:, 1] = 1 - uv[:, 1]
+    subs = [t[:, [0, 2, 1]] for t in subs]
+    mats = [export_material(glb, m, cache) for m in mr.read().m_Materials]
+    mats += [mats[-1] if mats else None] * (len(subs) - len(mats))
+    return glb.mesh(name, pos, nrm, uv, None, None, subs, mats)
+
+
+def export_attachment(env, prefab_sf, short, base, out_dir):
+    """*.vm.attachment.prefab: malhas estáticas, ponto de mira (IronsightAimPoint), ponto do efeito e overlay do scope."""
+    root = find_prefab(prefab_sf, f'assets/prefabs/weapon mods/{base}.vm.attachment.prefab')
+    tree = Tree(root)
+    glb = GLB()
+    cache = {}
+    info = {'glb': f'mods/{short}.glb'}
+    active = []
+    for i, n in enumerate(tree.nodes):
+        active.append(i == 0 or (n['go'].read().m_IsActive and active[n['parent']]))
+        n['gi'] = glb.node(name=n['name'], translation=to3_pos(n['p']), rotation=to3_quat(n['q']),
+                           scale=list(n['s']) if n['s'] != (1, 1, 1) else None)
+        if n['name'] == 'effectBone':
+            info['effect'] = n['name']
+    for n in tree.nodes:
+        if n['children']:
+            glb.j['nodes'][n['gi']]['children'] = [tree.nodes[c]['gi'] for c in n['children']]
+    for i, n in enumerate(tree.nodes):
+        cs = {o.type.name if o.type.name != 'MonoBehaviour' else script_name(o): o for o in comps(n['go'])}
+        if active[i] and 'MeshFilter' in cs and 'MeshRenderer' in cs and cs['MeshRenderer'].read().m_Enabled:
+            mi = export_static(glb, cs['MeshFilter'], cs['MeshRenderer'], cache, n['name'])
+            if mi is not None:
+                glb.j['nodes'][n['gi']]['mesh'] = mi
+        if 'IronsightAimPoint' in cs:
+            tp = tree.by_tr.get(cs['IronsightAimPoint'].read_typetree()['targetPoint']['m_PathID'])
+            if tp is not None:
+                info['aimPoint'], info['targetPoint'] = n['name'], tree.nodes[tp]['name']
+        if 'ViewmodelScope' in cs:
+            pp = cs['ViewmodelScope'].read_typetree()['scopeMaterialOverride']
+            o = cs['ViewmodelScope']
+            f = o.assets_file if pp['m_FileID'] == 0 else env.get_cab(o.assets_file.externals[pp['m_FileID'] - 1].name)
+            mat = f.objects[pp['m_PathID']].read()
+            tex = dict(mat.m_SavedProperties.m_TexEnvs)['_MainTex'].m_Texture.read()
+            os.makedirs(os.path.join(out_dir, 'hud'), exist_ok=True)
+            tex.image.save(os.path.join(out_dir, 'hud', mat.m_Name + '.png'))
+            info['scope'] = f'hud/{mat.m_Name}.png'
+    os.makedirs(os.path.join(out_dir, 'mods'), exist_ok=True)
+    glb.write(os.path.join(out_dir, 'mods', f'{short}.glb'), [tree.nodes[0]['gi']])
+    return info
+
+
+def export_items(rust, out_dir, ids):
+    """Ícones e metadados (nome, descrição, pilha) do Bundles/items."""
+    import shutil
+    os.makedirs(os.path.join(out_dir, 'items'), exist_ok=True)
+    out = {}
+    for short in ids:
+        src = os.path.join(rust, 'Bundles/items', short)
+        shutil.copy(src + '.png', os.path.join(out_dir, 'items', short + '.png'))
+        d = json.load(open(src + '.json'))
+        out[short] = {'name': d['Name'], 'desc': d['Description'], 'stack': d['stackable'], 'category': d['Category'],
+                      'condition': d['condition']['max'] if d['condition']['enabled'] else 0}
+    return out
 
 
 # ---------- animações ----------
@@ -399,6 +514,12 @@ def export_viewmodel(env, prefab_sf, wid, prefab, arms, out_dir):
                 mesh_nodes.append(glb.node(name=n['name'] + '_mesh', mesh=mi, skin=sk))
             elif t == 'MonoBehaviour':
                 s = script_name(o)
+                if s == 'ViewmodelAttachmentOverride':
+                    # silenciadores volumosos (filtro de óleo, lata) vão num osso próprio
+                    for ov in o.read_typetree()['Overrides']:
+                        j = tree.by_tr.get(ov['TargetRoot']['m_PathID'])
+                        if j is not None:
+                            info['bulkyBone'] = tree.nodes[j]['name']
                 if s in ('IronSights', 'ViewmodelBob', 'ViewmodelSway', 'ViewmodelLower', 'ViewmodelPunch', 'BaseViewModel'):
                     tt = o.read_typetree()
                     f = mb_fields(o)
@@ -420,6 +541,15 @@ def export_viewmodel(env, prefab_sf, wid, prefab, arms, out_dir):
                             j = tree.by_tr.get(tt[k]['m_PathID'])
                             if j is not None:
                                 f[k] = tree.nodes[j]['name']
+                        # malhas da mira de ferro escondidas quando há mira acoplada
+                        by_go = {m['go'].path_id: m['name'] for m in tree.nodes}
+                        hide = []
+                        for pp in tt['hideSightMeshes']:
+                            ob = o.assets_file.objects.get(pp['m_PathID'])
+                            if ob is not None:
+                                g = ob.path_id if ob.type.name == 'GameObject' else ob.read(check_read=False).m_GameObject.path_id
+                                hide.append(by_go.get(g))
+                        f['hideSightMeshes'] = [h for h in hide if h]
                     info[s] = f
 
     # braços: hand_mesh do prefab genérico, ossos ligados por nome
@@ -507,7 +637,7 @@ def export_sound_def(obj, out_dir, done):
 def export_sounds(prefab_sf, info, out_dir, done):
     os.makedirs(os.path.join(out_dir, 'snd'), exist_ok=True)
     folder = info['prefab'].rsplit('/', 1)[0]
-    effects = {'attack'} | {e[2] for c in info['clips'].values() for e in c['events'] if e[1] == 'DoEffect' and e[2]}
+    effects = {'attack', 'attack_silenced', 'attack_silenced_oilfilter', 'attack_silenced_sodacan'} | {e[2] for c in info['clips'].values() for e in c['events'] if e[1] == 'DoEffect' and e[2]}
     snd = {}
     for name in sorted(effects):
         defs = sound_defs_of_prefab(prefab_sf, f'{folder}/effects/{name}.prefab')
@@ -611,13 +741,19 @@ def main(rust, out_dir, ids):
     arms = arms_source(sf)
     manifest_path = os.path.join(out_dir, 'manifest.json')
     manifest = json.load(open(manifest_path)) if os.path.exists(manifest_path) else {'weapons': {}}
-    targets = ids or ['hud', *VIEWMODELS]
+    targets = ids or ['hud', 'mods', *VIEWMODELS]
     done = set()
+    if 'mods' in targets:
+        manifest['mods'] = {}
+        for short, base in MOD_VM.items():
+            manifest['mods'][short] = export_attachment(env, sf, short, base, out_dir)
+            print('   mod', short, manifest['mods'][short])
+        manifest['items'] = export_items(rust, out_dir, [*VIEWMODELS, *MOD_VM, *ITEMS_EXTRA])
     if 'hud' in targets:
         manifest['hud'] = export_hud(env, rust, out_dir)
         os.makedirs(os.path.join(out_dir, 'snd'), exist_ok=True)
         manifest['env'] = export_env_sounds(env, sf, out_dir, done)
-    for wid in [t for t in targets if t != 'hud']:  # 'hud' = HUD + sons de ambiente
+    for wid in [t for t in targets if t not in ('hud', 'mods')]:  # 'hud' = HUD + sons de ambiente
         print('>>', wid)
         info, _ = export_viewmodel(env, sf, wid, VIEWMODELS[wid], arms, out_dir)
         info['sounds'] = export_sounds(sf, info, out_dir, done)

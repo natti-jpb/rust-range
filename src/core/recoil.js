@@ -37,9 +37,10 @@ export class Recoil {
 
     if (rp.useCurves) {
       // Alvo absoluto ao longo do pente; nada de ADS/agachar/movimento neste caminho.
-      const t = clamp01(g.shots / g.capacity);
-      const tp = rp.recoilPitchMax * evalCurve(rp.pitchCurve, t);
-      const ty = rp.recoilYawMax * evalCurve(rp.yawCurve, t);
+      // w.recoilScale: média dos scalars de recoil dos mods (ProjectileWeaponMod.Average)
+      const t = clamp01(g.shots / g.capacity), k = w.recoilScale ?? 1;
+      const tp = rp.recoilPitchMax * evalCurve(rp.pitchCurve, t) * k;
+      const ty = rp.recoilYawMax * evalCurve(rp.yawCurve, t) * k;
       const r = this.aim.recoil;
       if (g.shots === 0 && (r.pitch || r.yaw)) this.finalize(); // sem recuperação: fica na mira
       // Vector3.MoveTowards(recoilAngles, alvo, deltaTime * 20)
@@ -69,7 +70,7 @@ export class Recoil {
   shot(w, g, rp, ctx) {
     g.penalty = Math.min(g.penalty + w.aimconePenaltyPerShot, w.aimConePenaltyMax);
     if (rp.useCurves) return;
-    let s = (ctx.ducked ? 0.5 : 1) * (ctx.aiming ? rp.ADSScale : 1) * (1 + ctx.moveFrac * rp.movementPenalty);
+    let s = (ctx.ducked ? 0.5 : 1) * (ctx.aiming ? rp.ADSScale : 1) * (1 + ctx.moveFrac * rp.movementPenalty) * (w.recoilScale ?? 1);
     let pitch = s * rand(rp.recoilPitchMin, rp.recoilPitchMax);
     let yaw = s * rand(rp.recoilYawMin, rp.recoilYawMax);
     if (rp.curvesAsScalar) {
@@ -85,12 +86,13 @@ export class Recoil {
     this.kicks.push({ pitch, yaw, dur: Math.max(rand(rp.timeToTakeMin, rp.timeToTakeMax), 1e-3), t: 0 });
   }
 
-  // Aimcone em graus (largura total do cone). Fórmula do GetAimCone.
+  // Aimcone em graus (largura total do cone). Fórmula do GetAimCone; mods: (base)·sightScale + sightOffset,
+  // no hip ainda + hipAimCone·hipScale + hipOffset. ammoSpread = projectileSpread da munição.
   cone(w, g, rp, aiming) {
-    let c = w.aimCone + g.penalty + g.stance;
-    if (!aiming) c += w.hipAimCone + g.stance;
+    let c = (w.aimCone + g.penalty + g.stance) * (w.sightScale ?? 1) + (w.sightOffset ?? 0);
+    if (!aiming) c += (w.hipAimCone + g.stance) * (w.hipScale ?? 1) + (w.hipOffset ?? 0);
     if (rp.overrideAimconeWithCurve) c *= rp.aimconeCurveScale * evalCurve(rp.aimconeCurve, clamp01(g.shots / rp.shotsUntilMax));
-    return c;
+    return c + (w.ammoSpread ?? 0);
   }
 
   // Desvio (graus) do tiro dentro do cone: direção aleatória, raio = curva(Random01).

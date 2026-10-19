@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { evalCurve } from '../core/curve.js';
+import { MODS } from '../data/weapons.js';
 import { flashTexture } from './textures.js';
 
 // Viewmodels reais do Rust, exportados localmente por tools/extract/export_assets.py.
@@ -32,6 +33,7 @@ function buildClip(c) {
 }
 
 const _a = new THREE.Vector3(), _t = new THREE.Vector3(), _q = new THREE.Quaternion(), _fwd = new THREE.Vector3(0, 0, -1);
+const _wq = new THREE.Quaternion();
 const IDENT = new THREE.Quaternion();
 
 export class RustViewModel {
@@ -48,6 +50,8 @@ export class RustViewModel {
     this.scene.add(this.root);
     this.loader = new GLTFLoader();
     this.cache = {};
+    this.modCache = {};
+    this.token = 0;
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
     this.flash.visible = false;
     this.s = { adsP: 0, ads: 0, aiming: false, bob: 0, lower: 0, swayX: 0, swayY: 0, punchT: 1, flashT: 0 };
@@ -76,17 +80,78 @@ export class RustViewModel {
 
   preload() { for (const id of Object.keys(this.m.weapons)) this.load(id); }
 
-  show(w) {
-    this.want = w.id;
+  // *.vm.attachment.prefab exportados (malhas estáticas + pontos de mira/efeito)
+  loadMod(id) {
+    this.modCache[id] ??= this.loader.loadAsync(BASE + this.m.mods[id].glb).then((g) => {
+      g.scene.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+      return g.scene;
+    });
+    return this.modCache[id];
+  }
+
+  show(w, item) {
+    this.want = item ?? w;
+    if (!w) { this.root.clear(); this.cur = null; return; }
     this.load(w.id).then((v) => {
-      if (this.want !== w.id) return;
+      if (this.want !== (item ?? w)) return;
       this.root.clear();
       this.cur = v;
       this.root.add(v.obj);
       (v.muzzle || v.obj).add(this.flash);
+      v.sig = null;
+      this.attach(item);
       this.action = null;
       this.play('deploy', true);
     });
+  }
+
+  // Mods no osso do ItemModEntity.defaultBone (scope.attachment, barrel, flashlight.attachment);
+  // silenciadores volumosos no barrel_bulky (ViewmodelAttachmentOverride). Mira acoplada esconde
+  // BaseViewModel.hideSightMeshes e vira o aimPoint do IronSights (IronSightOverride).
+  attach(item) {
+    const v = this.cur;
+    if (!v || !item?.mods) return;
+    const ids = item.mods.filter((m) => m && this.m.mods?.[m.id]).map((m) => m.id);
+    const sig = ids.join('|');
+    if (v.sig === sig) return;
+    v.sig = sig;
+    const token = ++this.token;
+    Promise.all(ids.map((id) => this.loadMod(id).then((o) => [id, o]))).then((list) => {
+      if (token !== this.token || this.cur !== v) return;
+      for (const o of v.attached ?? []) o.removeFromParent();
+      Object.assign(v, { attached: [], sight: null, laser: null, flashlight: null, muzzleNow: v.muzzle, silenced: false });
+      let hasSight = false;
+      for (const [id, obj] of list) {
+        const def = this.m.mods[id], md = MODS[id];
+        let bone = md.bone.replace(/\./g, '_');
+        if (md.isSilencer && /oilfilter|sodacan/.test(id) && v.info.bulkyBone) bone = v.info.bulkyBone;
+        (v.obj.getObjectByName(bone) ?? v.obj).add(obj);
+        v.attached.push(obj);
+        if (md.slots & 8) hasSight = true;
+        if (def.aimPoint) {
+          v.sight = { aim: obj.getObjectByName(def.aimPoint), target: obj.getObjectByName(def.targetPoint),
+            fov: md.sight?.fieldOfViewOffset, scope: def.scope ? BASE + def.scope : null };
+        }
+        if (def.effect && md.isLight) v[md.needsOn ? 'laser' : 'flashlight'] = obj.getObjectByName(def.effect);
+        if (md.isSilencer) { v.silenced = true; v.muzzleNow = v.obj.getObjectByName('muzzle_offset_silencer') ?? v.muzzle; }
+        if (md.isMuzzleBrake || md.isMuzzleBoost) v.muzzleNow = v.obj.getObjectByName('muzzle_offset_brake') ?? v.muzzle;
+      }
+      for (const n of v.info.BaseViewModel?.hideSightMeshes ?? []) {
+        for (const o of [v.obj.getObjectByName(n), v.obj.getObjectByName(n + '_mesh')]) if (o) o.visible = !hasSight;
+      }
+      (v.muzzleNow || v.obj).add(this.flash);
+    });
+  }
+
+  // ponto (effectBone do mod) e direção (paralela ao cano: aimPoint → targetPoint da mira de ferro)
+  // do laser/lanterna, no espaço da câmera do viewmodel
+  effectRay(which, pos, dir) {
+    const v = this.cur, n = v?.[which];
+    if (!n || !this.root.visible) return false;
+    n.getWorldPosition(pos);
+    if (v.aim && v.target) dir.subVectors(v.target.getWorldPosition(dir), v.aim.getWorldPosition(_a)).normalize();
+    else dir.set(0, 0, -1).applyQuaternion(n.getWorldQuaternion(_wq));
+    return true;
   }
 
   clipName(...names) { return names.find((n) => this.cur?.clips[n]); }
@@ -157,9 +222,10 @@ export class RustViewModel {
     this.root.position.set(0, 0, 0);
     this.root.quaternion.identity();
     this.root.updateMatrixWorld(true);
-    if (v.aim && v.target && s.ads > 0) {
-      v.aim.getWorldPosition(_a);
-      v.target.getWorldPosition(_t);
+    const aimN = v.sight?.aim ?? v.aim, tgtN = v.sight?.target ?? v.target;
+    if (aimN && tgtN && s.ads > 0) {
+      aimN.getWorldPosition(_a);
+      tgtN.getWorldPosition(_t);
       _q.setFromUnitVectors(_t.sub(_a).normalize(), _fwd);
       this.root.quaternion.slerpQuaternions(IDENT, _q, s.ads);
       this.root.position.copy(_a).applyQuaternion(this.root.quaternion).multiplyScalar(-s.ads);
@@ -186,10 +252,13 @@ export class RustViewModel {
     this.root.rotateY(s.swayX * (1 - 0.7 * s.ads) + s.lower * 0.5);
     this.root.rotateX(s.swayY * (1 - 0.7 * s.ads) - s.lower * 0.3);
 
-    this.camera.fov = 75 + (isp.fieldOfViewOffset ?? 0) * s.ads;
+    this.camera.fov = 75 + (v.sight?.fov ?? isp.fieldOfViewOffset ?? 0) * s.ads;
     this.camera.updateProjectionMatrix();
     s.flashT -= dt;
-    this.flash.visible = s.flashT > 0 && s.ads < 0.5;
+    this.flash.visible = s.flashT > 0 && s.ads < 0.5 && !v.silenced;
+    // HideIfScoped: com luneta, o viewmodel some no fim do ADS e entra o overlay
+    this.scope = v.sight?.scope && s.ads > 0.92 ? v.sight.scope : null;
+    this.root.visible = !this.scope;
   }
 }
 

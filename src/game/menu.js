@@ -2,7 +2,7 @@ import { GUNS, settings, save } from './config.js';
 import { t, lang } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+const KEYS = []; // armas agora vão para o belt (1–6)
 
 export class Menu {
   constructor({ onPlay, onMode, onWeapon, onSettings }) {

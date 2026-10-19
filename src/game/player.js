@@ -55,7 +55,8 @@ export class Player {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('wheel', (e) => { if (this.locked) this.wheel += Math.sign(e.deltaY); }, { passive: true });
     document.addEventListener('keydown', (e) => {
-      if (!this.locked) return;
+      // com o inventário aberto (sem pointer lock) o jogador ainda anda, como no Rust
+      if (!this.locked && !this.ui) return;
       if (!e.repeat) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (e.code !== 'Escape') e.preventDefault();

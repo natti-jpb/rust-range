@@ -4,7 +4,7 @@ import * as THREE from 'three';
 // local troca as procedurais pelas reais se existirem em mc-assets/; a pública usa as procedurais.
 export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, COBBLE: 4, SAND: 5, GRAVEL: 6, LOG: 7, LEAVES: 8, PLANKS: 9,
-  GLASS: 10, WATER: 11, BEDROCK: 12, COAL: 13, IRON: 14, WOOL: 15, HAY: 16, TARGET: 17, BRICKS: 18, TNT: 19,
+  GLASS: 10, WATER: 11, BEDROCK: 12, COAL: 13, IRON: 14, WOOL: 15, HAY: 16, TARGET: 17, BRICKS: 18, TNT: 19, CHEST: 20,
 };
 
 // opaque: oculta faces vizinhas e conta no AO. solid: colide. cutout: alpha test. sound: grupo de som.
@@ -31,6 +31,8 @@ export const BLOCKS = [
   { name: 'target', tex: { top: 'target_top', side: 'target_side', bottom: 'target_top' }, sound: 'grass', hardness: 0.5 },
   { name: 'bricks', tex: 'bricks', sound: 'stone', hardness: 2 },
   { name: 'tnt', tex: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_bottom' }, sound: 'grass', hardness: 0, tnt: true },
+  // baú do arsenal (no Minecraft o baú é entidade; aqui vira bloco com textura procedural)
+  { name: 'chest', tex: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' }, sound: 'wood', hardness: Infinity, container: true },
 ].map((b) => ({ solid: true, opaque: true, ...b }));
 
 // ---------- texturas procedurais 16×16 ----------
@@ -100,6 +102,12 @@ const PAINTERS = {
   tnt_side: (x, y, r) => (y >= 5 && y <= 10 ? (((x >= 2 && x <= 13) && (y === 6 || y === 9 || x % 4 === 2)) ? [30, 30, 30] : [230, 230, 230]) : vary([200, 50, 40], r, 20)),
   tnt_top: (x, y, r) => (Math.hypot(x - 7.5, y - 7.5) < 3 ? [40, 40, 40] : vary([200, 60, 45], r, 16)),
   tnt_bottom: (x, y, r) => vary([190, 52, 40], r, 16),
+  chest_top: (x, y, r) => (x === 0 || y === 0 || x === 15 || y === 15 ? vary([58, 40, 22], r, 8) : vary([160, 112, 52], r, 18)),
+  chest_side: (x, y, r) => {
+    if (x === 0 || y === 0 || x === 15 || y === 15 || y === 5) return vary([58, 40, 22], r, 8);
+    if (x >= 7 && x <= 8 && y >= 3 && y <= 7) return y === 7 ? [60, 60, 60] : vary([200, 200, 200], r, 16);
+    return vary(y < 5 ? [170, 120, 56] : [150, 104, 46], r, 18);
+  },
 };
 
 export const TEXTURES = Object.keys(PAINTERS);

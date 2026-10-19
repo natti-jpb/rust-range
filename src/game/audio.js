@@ -77,7 +77,16 @@ export class Audio {
   shot(w) {
     if (!this.ctx) return;
     const info = this.manifest?.weapons[w.id];
+    // silenciador: attack_silenced (ou a variante do filtro de óleo / lata, se a arma tiver)
+    const sil = w.silencer && ['attack_silenced' + (w.silencer.includes('oilfilter') ? '_oilfilter' : w.silencer.includes('sodacan') ? '_sodacan' : ''), 'attack_silenced']
+      .find((n) => this.rust?.has(info, n));
+    if (sil) return this.rust.effect(info, sil);
     if (this.rust?.has(info, 'attack')) return this.rust.effect(info, 'attack');
+    if (w.silencer) {
+      const [d, t] = this.out(0.25 * w.snd.gain, 0.4);
+      this.burst(d, t, 0.06, 'lowpass', 1400 * w.snd.tone, 0.6, 1);
+      return;
+    }
     const { tone, body, gain } = w.snd;
     const [d, t] = this.out(0.55 * gain, 0.9);
     this.burst(d, t, 0.02, 'highpass', 2500 * tone, 0.5, 1.2); // estalo
@@ -120,6 +129,8 @@ export class Audio {
     if (name === 'explode') {
       this.burst(d, t, 1.4, 'lowpass', 300, 0.6, 2.2);
       this.tone(d, t, 0.6, 70, 25, 1.6);
+    } else if (name === 'explode_small') {
+      this.burst(d, t, 0.35, 'lowpass', 900, 0.7, 1.4);
     } else if (name.endsWith('_hurt') || name.endsWith('_death')) {
       const f = { zombie: 140, skeleton: 900, creeper: 500, pig: 420 }[base] || 300;
       this.tone(d, t, name.endsWith('_death') ? 0.6 : 0.25, f * 1.4, f * 0.7, 0.5, base === 'skeleton' ? 'square' : 'sawtooth');

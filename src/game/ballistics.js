@@ -18,7 +18,8 @@ export class Ballistics {
   }
 
   fire(origin, dir, w, owner = null) {
-    this.list.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(w.velocity), w, owner, dist: 0, age: 0, tracer: this.fx.tracer() });
+    // silenciado: projectile.invisible (sem traçante)
+    this.list.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(w.velocity), w, owner, dist: 0, age: 0, tracer: w.silencer ? -1 : this.fx.tracer() });
   }
 
   update(dt) {

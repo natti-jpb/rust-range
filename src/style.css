@@ -44,6 +44,13 @@ html, body { margin: 0; height: 100%; background: #111; color: var(--ink); overf
 #hp { position: absolute; right: 22px; bottom: 96px; font-size: 15px; color: #a5dd42; text-shadow: 0 1px 3px #000; }
 #hp b { font-size: 26px; margin-left: 4px; }
 #hp::before { content: '+'; font-weight: 900; font-size: 22px; }
+#scope { position: absolute; inset: 0; display: flex; justify-content: center; overflow: hidden; }
+#scope[hidden], #laser[hidden], #prompt[hidden] { display: none; }
+#scope img { height: 100%; aspect-ratio: 1; box-shadow: 0 0 0 100vmax #000; } /* centro transparente; laterais pretas */
+#laser { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #ff2a1a;
+  box-shadow: 0 0 6px 2px rgba(255, 40, 20, 0.7); }
+#prompt { position: absolute; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); font-size: 15px; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 4px 10px; background: rgba(0, 0, 0, 0.45); text-shadow: 0 1px 2px #000; white-space: nowrap; }
 #hurt { position: absolute; inset: 0; opacity: 0; transition: opacity 0.5s; background: radial-gradient(ellipse at center, transparent 45%, rgba(160, 0, 0, 0.55)); }
 #hurt.on { opacity: 1; transition: none; }
 #dead { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;

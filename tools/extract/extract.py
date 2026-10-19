@@ -34,6 +34,31 @@ AMMO = {
     'rifle': ('assets/prefabs/ammo/rifle/ammo_rifle.item.prefab', 'assets/prefabs/ammo/rifle/riflebullet.prefab'),
     'pistol': ('assets/prefabs/ammo/pistol/ammo_pistol.item.prefab', 'assets/prefabs/ammo/pistol/pistolbullet.prefab'),
 }
+# munições: item (velocidade) + projétil (dano, arrasto, gravidade)
+AMMO_TYPES = {
+    'ammo.rifle': ('rifle', 'rifle/ammo_rifle.item.prefab', 'rifle/riflebullet.prefab'),
+    'ammo.rifle.hv': ('rifle', 'rifle/ammo_rifle_hv.item.prefab', 'rifle/riflebullet.prefab'),
+    'ammo.rifle.incendiary': ('rifle', 'rifle/ammo_rifle_fire.item.prefab', 'rifle/riflebullet_fire.prefab'),
+    'ammo.rifle.explosive': ('rifle', 'rifle/ammo_rifle_explosive.item.prefab', 'rifle/riflebullet_explosive.prefab'),
+    'ammo.pistol': ('pistol', 'pistol/ammo_pistol.item.prefab', 'pistol/pistolbullet.prefab'),
+    'ammo.pistol.hv': ('pistol', 'pistol/ammo_pistol_hv.item.prefab', 'pistol/pistolbullet.prefab'),
+    'ammo.pistol.fire': ('pistol', 'pistol/ammo_pistol_fire.item.prefab', 'pistol/pistolbullet_fire.prefab'),
+}
+# attachments: shortname -> prefab base em assets/prefabs/weapon mods/
+MOD_PREFABS = {
+    'weapon.mod.holosight': 'holosight/holosight', 'weapon.mod.8x.scope': '8x scope/8xscope',
+    'weapon.mod.small.scope': 'smallscope/smallscope', 'weapon.mod.simplesight': 'reddotsight/simplesight',
+    'weapon.mod.lasersight': 'lasersight/lasersight', 'weapon.mod.flashlight': 'flashlight/flashlight',
+    'weapon.mod.silencer': 'silencers/silencer', 'weapon.mod.oilfiltersilencer': 'silencers/oilfiltersilencer',
+    'weapon.mod.sodacansilencer': 'silencers/sodacansilencer', 'weapon.mod.muzzlebrake': 'muzzlebrake/muzzlebrake',
+    'weapon.mod.muzzleboost': 'muzzleboost/muzzleboost', 'weapon.mod.extendedmags': 'extendedmags/extendedmags',
+    'weapon.mod.burstmodule': 'burstmodule/burstmodule',
+    'weapon.mod.gascompressionovedrive': 'gascompressionoverdrive/gascompressionoverdrive',
+}
+MOD_STATS = ['repeatDelay', 'projectileVelocity', 'projectileDamage', 'projectileDistance', 'aimsway', 'aimswaySpeed',
+             'recoil', 'sightAimCone', 'hipAimCone', 'magazineCapacity']
+MOD_FLAGS = ['isSilencer', 'isMuzzleBrake', 'isMuzzleBoost', 'isScope', 'isLight', 'burstCount', 'zoomAmountDisplayOnly']
+
 RECOIL_FIELDS = ['recoilYawMin', 'recoilYawMax', 'recoilPitchMin', 'recoilPitchMax', 'timeToTakeMin',
                  'timeToTakeMax', 'ADSScale', 'movementPenalty', 'useCurves', 'curvesAsScalar',
                  'shotsUntilMax', 'maxRecoilRadius', 'overrideAimconeWithCurve', 'aimconeCurveScale']
@@ -111,6 +136,10 @@ def curve(c):
 
 def main(rust, out):
     B = rust + '/Bundles/shared/'
+
+    def info(short):  # nome e pilha (Bundles/items/<shortname>.json)
+        with open(f'{rust}/Bundles/items/{short}.json') as f:
+            return json.load(f)
     # RecoilProperties (ScriptableObject) ficam no content.bundle
     recoil = {}
     for pid, o, _ in behaviours(load(B + 'content.bundle'), {'recoilYawMin', 'newRecoilOverride'}):
@@ -130,6 +159,67 @@ def main(rust, out):
     for pid, o, objs in behaviours(scenes, {'damageTypes', 'drag', 'gravityModifier'}):
         d = o.read_typetree()
         bullets[go_name(objs, d)] = d
+
+    # definições de item: slots que cada mod ocupa (bitflag) e slots/capacidade de cada arma
+    items, containers, bones = {}, {}, {}
+    pre = load(B + 'items.preload.bundle')
+    for pid, o, objs in behaviours(pre, {'shortname', 'occupySlots'}):
+        d = o.read_typetree()
+        items[d['shortname']] = d
+        go = objs[d['m_GameObject']['m_PathID']].read()
+        for c in go.m_Component:
+            x = (c.component if hasattr(c, 'component') else c).deref()
+            if x.type.name != 'MonoBehaviour':
+                continue
+            t = x.read_typetree()
+            if 'availableSlots' in t:
+                containers[d['shortname']] = (t['capacity'], t['availableSlots'])
+            if 'defaultBone' in t:
+                bones[d['shortname']] = t['defaultBone']
+
+    # stats dos mods (ProjectileWeaponMod na entidade) e override de mira do viewmodel
+    mods = {}
+    for short, base in MOD_PREFABS.items():
+        ent = vm = None
+        for pid, o, objs in behaviours(scenes, {'needsOnForEffects', 'isSilencer'}):
+            n = go_name(objs, o.read_typetree())
+            if n == f'assets/prefabs/weapon mods/{base}.entity.prefab':
+                ent = o.read_typetree()
+            elif n == f'assets/prefabs/weapon mods/{base}.vm.attachment.prefab':
+                vm = o
+        m = {'name': info(short)['Name'], 'slots': items[short]['occupySlots'], 'bone': bones.get(short, '')}
+        if ent.get('needsOnForEffects'):
+            m['needsOn'] = 1  # laser/lanterna: bônus só com a luz ligada
+        for k in MOD_STATS:
+            v = ent[k]
+            if v['enabled']:
+                m[k] = [round(v['scalar'], 4), round(v['offset'], 4)]
+        for k in MOD_FLAGS:
+            if ent.get(k) not in (None, 0, -1, 0.0):
+                m[k] = round(ent[k], 3) if isinstance(ent[k], float) else ent[k]
+        if ent.get('zoomLevels'):
+            m['zoomLevels'] = ent['zoomLevels']
+        if vm is not None:
+            objs = vm.assets_file.objects
+            go = objs[vm.read_typetree()['m_GameObject']['m_PathID']].read()
+            for c in go.m_Component:
+                x = (c.component if hasattr(c, 'component') else c).deref()
+                if x.type.name == 'MonoBehaviour' and 'zoomFactor' in x.read_typetree():
+                    t = x.read_typetree()
+                    m['sight'] = {'zoomFactor': round(t['zoomFactor'], 4), 'fieldOfViewOffset': t['fieldOfViewOffset'], 'fovBias': t.get('fovBias', 1)}
+        mods[short] = m
+
+    ammo_out = {}
+    for short, (cal, item_p, proj_p) in AMMO_TYPES.items():
+        it = ammo_items['assets/prefabs/ammo/' + item_p]
+        bl = bullets['assets/prefabs/ammo/' + proj_p]
+        a = {'name': info(short)['Name'], 'stack': info(short)['stackable'], 'caliber': cal, 'velocity': it['projectileVelocity'], 'spread': round(it['projectileSpread'], 3),
+             'damage': sum(t['amount'] for t in bl['damageTypes'] if t['type'] == 9),
+             'heat': round(sum(t['amount'] for t in bl['damageTypes'] if t['type'] == 5), 3),
+             'drag': round(bl['drag'], 4), 'gravity': round(bl['gravityModifier'], 4)}
+        if 'explosive' in short:
+            a['radius'] = 1.5  # ItemModProjectileRadialDamage
+        ammo_out[short] = a
 
     used, weapons = {}, []
     for short, prefab, ammo in WEAPONS:
@@ -164,6 +254,8 @@ def main(rust, out):
             'aimconeCurve': curve(e['aimconeCurve']),
             'recoilLegacy': base['m_Name'],
             'recoilCurrent': cur['m_Name'],
+            'modCapacity': containers[short][0],
+            'modSlots': containers[short][1],
         })
 
     rec_out = {}
@@ -182,7 +274,10 @@ def main(rust, out):
         f.write('// recoilCurrent = o newRecoilOverride que o jogo usa hoje (RecoilProperties.GetRecoil()).\n\n')
         compact = lambda o: json.dumps(o, separators=(',', ':'))
         f.write('export const RECOIL = {\n' + ',\n'.join(f'  {compact(k)}: {compact(v)}' for k, v in rec_out.items()) + '\n};\n\n')
-        f.write('export const WEAPONS = [\n' + ',\n'.join('  ' + compact(w) for w in weapons) + '\n];\n')
+        f.write('export const WEAPONS = [\n' + ',\n'.join('  ' + compact(w) for w in weapons) + '\n];\n\n')
+        f.write('// slots (bitflag): 8 mira, 2|4 boca do cano, 16 sob o cano, 32 pente, 64 burst/GCO. Stats: [escala, soma]\n')
+        f.write('export const MODS = {\n' + ',\n'.join(f'  {compact(k)}: {compact(v)}' for k, v in mods.items()) + '\n};\n\n')
+        f.write('export const AMMO = {\n' + ',\n'.join(f'  {compact(k)}: {compact(v)}' for k, v in ammo_out.items()) + '\n};\n')
     print('ok', len(weapons), 'armas,', len(rec_out), 'recoils ->', out)
 
 

@@ -31,9 +31,10 @@ const AO = [0.42, 0.62, 0.82, 1.0];
 
 const VERT = /* glsl */`
 attribute vec3 uvl; attribute vec3 color;
-varying vec3 vUvl; varying vec3 vColor; varying float vDepth;
+varying vec3 vUvl; varying vec3 vColor; varying float vDepth; varying vec3 vWorld;
 void main() {
   vUvl = uvl; vColor = color;
+  vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDepth = -mv.z;
   gl_Position = projectionMatrix * mv;
@@ -41,11 +42,15 @@ void main() {
 const FRAG = /* glsl */`
 precision highp sampler2DArray;
 uniform sampler2DArray atlas; uniform vec3 fogColor; uniform float fogNear; uniform float fogFar; uniform float light; uniform float alpha;
-varying vec3 vUvl; varying vec3 vColor; varying float vDepth;
+uniform vec3 spotPos; uniform vec3 spotDir; uniform float spotOn;
+varying vec3 vUvl; varying vec3 vColor; varying float vDepth; varying vec3 vWorld;
 void main() {
   vec4 c = texture(atlas, vUvl);
   if (c.a < 0.5 && alpha >= 1.0) discard;
-  c.rgb *= vColor * light;
+  // lanterna da arma: cone de ~25° com queda até 30 m
+  vec3 d = vWorld - spotPos; float dist = length(d);
+  float spot = spotOn * smoothstep(0.9, 0.975, dot(d / max(dist, 1e-3), spotDir)) * clamp(1.0 - dist / 30.0, 0.0, 1.0);
+  c.rgb *= vColor * light + spot * 0.9;
   c.rgb = mix(c.rgb, fogColor, smoothstep(fogNear, fogFar, vDepth));
   gl_FragColor = vec4(c.rgb, alpha < 1.0 ? c.a * alpha : 1.0);
   #include <colorspace_fragment>
@@ -58,7 +63,9 @@ export class VoxelWorld {
     this.seed = seed;
     this.mcTextures = mcTextures;
     this.listeners = [];
-    const uniforms = () => ({ atlas: { value: atlas }, fogColor: { value: new THREE.Color() }, fogNear: { value: 60 }, fogFar: { value: 180 }, light: { value: 1 }, alpha: { value: 1 } });
+    // spot* compartilhados: a lanterna atualiza os dois materiais de uma vez
+    this.spot = { spotPos: { value: new THREE.Vector3() }, spotDir: { value: new THREE.Vector3(0, -1, 0) }, spotOn: { value: 0 } };
+    const uniforms = () => ({ atlas: { value: atlas }, fogColor: { value: new THREE.Color() }, fogNear: { value: 60 }, fogFar: { value: 180 }, light: { value: 1 }, alpha: { value: 1 }, ...this.spot });
     this.mat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms() });
     this.waterMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms(), transparent: true, depthWrite: false });
     this.waterMat.uniforms.alpha.value = 0.8;
@@ -183,6 +190,9 @@ export class VoxelWorld {
     }
     for (let i = 0; i < 4; i++) put(cx - 20, y + i, cz - 30, B.GLASS);
     put(cx + 22, y, cz - 45, B.TNT); put(cx + 23, y, cz - 45, B.TNT); put(cx + 22, y + 1, cz - 45, B.TNT);
+    // baús do arsenal atrás da linha de tiro
+    put(cx - 3, y, cz + 5, B.CHEST); put(cx + 3, y, cz + 5, B.CHEST);
+    this.chests = [[cx - 3, y, cz + 5], [cx + 3, y, cz + 5]];
     this.spawn = new THREE.Vector3(cx + 0.5, y, cz + 3.5);
     this.rangeY = y;
   }
