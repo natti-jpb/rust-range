@@ -119,9 +119,9 @@ export class Audio {
   }
 
   // Sons do mundo/mobs: placeholders sintetizados (a versão local troca pelos do Minecraft)
-  mc(name, dist = 0) {
+  mc(name, dist = 0, pan = 0) {
     if (!this.ctx) return;
-    if (this.mcSounds?.play(name, dist)) return;
+    if (this.mcSounds?.play(name, dist, pan)) return true;
     const fall = Math.min(1, 8 / Math.max(dist, 4));
     if (fall < 0.04) return;
     const [d, t] = this.out(fall, 0.3, Math.min(dist / 343, 0.3));
@@ -150,7 +150,7 @@ export class Audio {
 
   hurt() {
     if (!this.ctx) return;
-    if (this.rust?.env('player_hurt', 0.8)) return;
+    if (this.rust?.env('takedamage', 0.8)) return; // fx/takedamage_hit_new.prefab
     const [d, t] = this.out(0.5, 0.1);
     this.burst(d, t, 0.12, 'lowpass', 500, 1, 1.4);
     this.tone(d, t, 0.15, 180, 90, 0.6);

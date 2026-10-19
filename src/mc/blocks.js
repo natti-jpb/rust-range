@@ -22,7 +22,7 @@ export const BLOCKS = [
   { name: 'oak_leaves', tex: 'oak_leaves', opaque: false, cutout: true, sound: 'grass', tint: FOLIAGE, hardness: 0.2 },
   { name: 'oak_planks', tex: 'oak_planks', sound: 'wood', hardness: 2 },
   { name: 'glass', tex: 'glass', opaque: false, cutout: true, sound: 'glass', hardness: 0.3, fragile: true },
-  { name: 'water', tex: 'water_still', opaque: false, solid: false, liquid: true, sound: 'water' },
+  { name: 'water', tex: 'water_still', opaque: false, solid: false, liquid: true, sound: 'water', tint: [0.25, 0.46, 0.89] }, // #3F76E4
   { name: 'bedrock', tex: 'bedrock', sound: 'stone', hardness: Infinity },
   { name: 'coal_ore', tex: 'coal_ore', sound: 'stone', hardness: 3 },
   { name: 'iron_ore', tex: 'iron_ore', sound: 'stone', hardness: 3 },
@@ -32,7 +32,7 @@ export const BLOCKS = [
   { name: 'bricks', tex: 'bricks', sound: 'stone', hardness: 2 },
   { name: 'tnt', tex: { top: 'tnt_top', side: 'tnt_side', bottom: 'tnt_bottom' }, sound: 'grass', hardness: 0, tnt: true },
   // baú do arsenal (no Minecraft o baú é entidade; aqui vira bloco com textura procedural)
-  { name: 'chest', tex: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' }, sound: 'wood', hardness: Infinity, container: true },
+  { name: 'chest', tex: { top: 'chest_top', side: 'chest_side', bottom: 'chest_top' }, sound: 'wood', hardness: Infinity, container: true, opaque: false }, // 14×14: não esconde o chão
 ].map((b) => ({ solid: true, opaque: true, ...b }));
 
 // ---------- texturas procedurais 16×16 ----------
@@ -120,9 +120,10 @@ for (const b of BLOCKS) {
 }
 
 async function loadPng(url) {
-  const img = new Image();
-  img.src = url;
-  await img.decode();
+  // fetch + createImageBitmap: img.decode() pode ficar parado com a aba em segundo plano
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(url);
+  const img = await createImageBitmap(await res.blob());
   const c = document.createElement('canvas');
   c.width = c.height = 16;
   const g = c.getContext('2d');
@@ -135,14 +136,10 @@ async function loadPng(url) {
 // mcBase: pasta com as texturas reais (só na versão local); faltando alguma, usa a procedural.
 export async function buildAtlas(mcBase) {
   const data = new Uint8Array(16 * 16 * 4 * TEXTURES.length);
-  let real = 0;
-  for (let i = 0; i < TEXTURES.length; i++) {
-    let px = null;
-    if (mcBase) {
-      try { px = await loadPng(`${mcBase}${TEXTURES[i]}.png`); real++; } catch { px = null; }
-    }
-    data.set(px ?? paint(i * 7919 + 13, PAINTERS[TEXTURES[i]]), i * 1024);
-  }
+  // em paralelo: ~50 PNGs pequenos
+  const pxs = await Promise.all(TEXTURES.map((n) => (mcBase ? loadPng(`${mcBase}${n}.png`).catch(() => null) : null)));
+  const real = pxs.filter(Boolean).length;
+  pxs.forEach((px, i) => data.set(px ?? paint(i * 7919 + 13, PAINTERS[TEXTURES[i]]), i * 1024));
   const tex = new THREE.DataArrayTexture(data, 16, 16, TEXTURES.length);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.NearestFilter;

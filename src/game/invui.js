@@ -92,8 +92,8 @@ const AMMO_DOT = { hv: '#7fb6e6', incendiary: '#e3803f', fire: '#e3803f', explos
 const short = (id) => itemName(id).replace(/ Rifle Ammo| Ammo|Weapon /g, '').slice(0, 22);
 
 export class InventoryUI {
-  constructor(inv, { base, items, onDrop, onAmmo, onUnload, onChange }) {
-    Object.assign(this, { inv, base, items: items || {}, onDrop, onAmmo, onUnload, onChange });
+  constructor(inv, { base, items, onDrop, onAmmo, onUnload, onChange, onSound }) {
+    Object.assign(this, { inv, base, items: items || {}, onDrop, onAmmo, onUnload, onChange, onSound });
     const st = document.createElement('style');
     st.textContent = CSS(base);
     document.head.append(st);
@@ -296,6 +296,7 @@ export class InventoryUI {
     if (!p) return;
     if (!this.dragging && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 4) {
       this.dragging = true;
+      this.onSound?.(this.cont(p.c).slots[p.i].id, 'grab');
       p.el.classList.add('drag');
       this.ghost.innerHTML = `<div class="cell">${this.cellHTML(this.cont(p.c).slots[p.i])}</div>`;
       this.ghost.hidden = false;
@@ -320,6 +321,7 @@ export class InventoryUI {
     this.cancelDrag();
     const src = this.cont(p.c), it = src.slots[p.i];
     const s = this.slotAt(e.clientX, e.clientY);
+    this.onSound?.(it.id, 'drop');
     if (s) {
       const dst = this.cont(s.c), target = dst.slots[s.i];
       const n = p.split && it.amount > 1 ? Math.floor(it.amount / 2) : null;

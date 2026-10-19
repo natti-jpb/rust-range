@@ -52,6 +52,18 @@ python -I tools/extract/export_assets.py "$HOME/Library/Application Support/Stea
 - Esse conteúdo é da Facepunch e vem da sua cópia do jogo: está no `.gitignore` e no `.vercelignore`, e o `vite build` remove a pasta do `dist/`. Use só localmente (`npm run dev`).
 - Pipeline: `tools/extract/rustfs.py` (bundles via mmap, dependências sob demanda), `mecanim.py` (AnimationClip streamed/dense/constant → trilhas), `glb.py` (escritor glTF binário), `export_assets.py` (Unity → three: espelha Z, assa bindposes, specular-gloss → metal/rough).
 
+## Versão local com os assets do Minecraft (não publicar)
+
+Texturas dos blocos, skins dos mobs, baú, flecha, sol, nuvens, partículas de explosão e sons (com volume/pitch do código do jogo, sons ambientes e passos dos mobs):
+
+```bash
+python -I tools/extract/export_mc.py client.jar <índice de assets>.json public/mc-assets [~/Library/Application Support/minecraft/assets/objects]
+```
+
+- `client.jar` e o índice são os que o launcher oficial baixa (`piston-meta.mojang.com`); sons que não estiverem na pasta de objetos do launcher vêm de `resources.download.minecraft.net` (SHA1 conferido) e viram AAC.
+- Sai em `public/mc-assets/` (~1,5 MB), fora do git, da Vercel e do `dist/`. Sem a pasta, o jogo usa as texturas procedurais.
+- Do lado do Rust, `export_assets.py … fx` exporta o muzzle flash (atlas 3×3), o traçante do `riflebullet` e os decais de furo por material; `hud mods` exporta também os sons de pegar/soltar de cada item e o de dano do jogador.
+
 ## Rodar
 
 ```bash

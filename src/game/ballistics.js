@@ -48,6 +48,7 @@ export class Ballistics {
         }
       }
       p.age += dt;
+      if (this.fx.tracerTime) this.fx.tracerLen = p.vel.length() * this.fx.tracerTime;
       this.fx.moveTracer(p.tracer, p.pos, _dir.copy(p.vel).normalize(), p.dist);
       if (done || p.age > 3 || p.pos.y < -10) {
         this.fx.freeTracer(p.tracer);
@@ -85,6 +86,8 @@ class Effects {
     this.holeNew = holeMat(1);
     this.holeOld = holeMat(0.3);
     this.holeGeo = new THREE.PlaneGeometry(0.045, 0.045);
+    this.decalGeo = new THREE.PlaneGeometry(1, 1);
+    this.decals = null; // furos reais do Rust por material (useRust)
     this.holes = [];
     this.wallHoles = [];
     this.byBlock = {};
@@ -126,21 +129,41 @@ class Effects {
   moveTracer(i, pos, dir, dist) {
     if (i < 0) return;
     const a = this.tracers.geometry.attributes.position.array;
-    const len = Math.min(Math.max(dist - 4, 0), 7); // só aparece depois de 4 m
+    const len = Math.min(Math.max(dist - 4, 0), this.tracerLen ?? 7); // só aparece depois de 4 m
     a[i * 6] = pos.x - dir.x * len; a[i * 6 + 1] = pos.y - dir.y * len; a[i * 6 + 2] = pos.z - dir.z * len;
     a[i * 6 + 3] = pos.x; a[i * 6 + 4] = pos.y; a[i * 6 + 5] = pos.z;
     this.tracers.geometry.attributes.position.needsUpdate = true;
   }
 
   // Furo colado no objeto atingido (acompanha alvos que caem/balançam).
-  hole(hit, onWall) {
-    const m = new THREE.Mesh(this.holeGeo, this.holeNew);
+  // DeferredDecal do Rust (fx/decals/bullet/<tipo>): textura e tamanho = escala do prefab × DecalScale.range
+  useRust(base, fx) {
+    const load = new THREE.TextureLoader();
+    this.decals = {};
+    for (const [kind, d] of Object.entries(fx.decals)) {
+      const map = load.load(base + d.file);
+      map.colorSpace = THREE.SRGBColorSpace;
+      const mat = (opacity) => new THREE.MeshLambertMaterial({ map, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+      this.decals[kind] = { size: d.size, mat: mat(1), old: mat(0.3) };
+    }
+    if (fx.tracer) {
+      // TrailRenderer do riflebullet: _TintColor e time (comprimento = velocidade × time)
+      this.tracers.material.color.setRGB(...fx.tracer.tint);
+      this.tracers.material.opacity = 0.9;
+      this.tracerTime = fx.tracer.time;
+    }
+  }
+
+  hole(hit, onWall, kind = null) {
+    const dc = kind && this.decals?.[kind];
+    const m = new THREE.Mesh(dc ? this.decalGeo : this.holeGeo, dc ? dc.mat : this.holeNew);
+    if (dc) m.userData.old = dc.old;
     const parent = hit.object || this.scene;
     const p = hit.point.clone().addScaledVector(hit.normal, 0.004);
     m.position.copy(p);
     m.lookAt(p.clone().add(hit.normal));
     m.rotateZ(Math.random() * 6.28);
-    const s = 0.8 + Math.random() * 0.5;
+    const s = dc ? dc.size[0] + Math.random() * (dc.size[1] - dc.size[0]) : 0.8 + Math.random() * 0.5;
     m.scale.set(s, s, s);
     if (hit.object) parent.attach(m); else this.scene.add(m);
     if (hit.block) {
@@ -181,7 +204,7 @@ class Effects {
     }
   }
 
-  fadeWall() { for (const m of this.wallHoles) m.material = this.holeOld; }
+  fadeWall() { for (const m of this.wallHoles) m.material = m.userData.old ?? this.holeOld; }
 
   clearWall() {
     for (const m of this.wallHoles) {

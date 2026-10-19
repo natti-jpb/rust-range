@@ -9,8 +9,8 @@ const TICK = 1 / 20;
 const HP = 5; // 1 ponto de vida do Minecraft = 5 de dano do Rust (zumbi: 20 → 100)
 
 const TYPES = {
-  zombie: { w: 0.6, h: 1.95, hp: 20, speed: 0.23, follow: 35, attack: 3, hostile: true, eye: 1.74 },
-  skeleton: { w: 0.6, h: 1.99, hp: 20, speed: 0.25, follow: 16, hostile: true, ranged: true, eye: 1.74 },
+  zombie: { w: 0.6, h: 1.95, hp: 20, speed: 0.23, follow: 35, attack: 3, hostile: true, eye: 1.74, say: true },
+  skeleton: { w: 0.6, h: 1.99, hp: 20, speed: 0.25, follow: 16, hostile: true, ranged: true, eye: 1.74, say: true },
   creeper: { w: 0.6, h: 1.7, hp: 20, speed: 0.25, follow: 16, hostile: true, creeper: true, eye: 1.45 },
   pig: { w: 0.9, h: 0.9, hp: 10, speed: 0.25, passive: true, eye: 0.7 },
 };
@@ -63,7 +63,8 @@ export class Entities {
     world.listeners.push((x, y, z) => this.checkFall(x, y + 1, z));
   }
 
-  skin(type) { return (this.skins[type] ??= SKINS[type]()); }
+  // realSkins: texturas do Minecraft (entity/<mob>.png) quando exportadas; senão as procedurais
+  skin(type) { return (this.skins[type] ??= this.realSkins?.[type] ?? SKINS[type]()); }
 
   spawn(type, pos) {
     const m = new Mob(type, pos, this.skin(type));
@@ -124,6 +125,8 @@ export class Entities {
       if (m.pos.distanceTo(p.pos) > 110 || m.pos.y < -10) { this.remove(m); this.mobs.splice(i, 1); continue; }
       this.ai(m, p);
       this.physics(m);
+      // Mob.baseTick: som ambiente quando random(1000) < ambientSoundTime++ (intervalo 80 ticks)
+      if (m.t.say && Math.random() * 1000 < (m.ambient = (m.ambient ?? 0) + 1)) { m.ambient = -80; this.hooks.sound(`${m.type}_say`, m.pos); }
       if (m.hurtT > 0) m.hurtT--;
       if (m.cool > 0) m.cool--;
     }
@@ -214,7 +217,15 @@ export class Entities {
     m.motion.x *= fr;
     m.motion.z *= fr;
     if (m.ground && m.motion.y < 0) m.motion.y = 0;
-    m.walk += Math.hypot(m.pos.x - m.prev.x, m.pos.z - m.prev.z) * 4;
+    const moved = Math.hypot(m.pos.x - m.prev.x, m.pos.z - m.prev.z);
+    m.walk += moved * 4;
+    // Entity.move: passo a cada 1 de moveDist (0,6 × distância); creeper usa o som do bloco
+    m.moveDist = (m.moveDist ?? 0) + moved * 0.6;
+    if (m.ground && m.moveDist > (m.nextStep ?? 1)) {
+      m.nextStep = m.moveDist + 1;
+      const below = BLOCKS[this.world.get(Math.floor(m.pos.x), Math.floor(m.pos.y - 0.2), Math.floor(m.pos.z))];
+      this.hooks.sound(m.type === 'creeper' ? `step_${below?.sound === 'glass' ? 'stone' : below?.sound ?? 'stone'}` : `${m.type}_step`, m.pos);
+    }
   }
 
   // ---------- render/animação ----------
@@ -291,10 +302,30 @@ export class Entities {
     const spread = 0.0075 * 6;
     d.x += (Math.random() - 0.5) * 2 * spread; d.y += (Math.random() - 0.5) * 2 * spread; d.z += (Math.random() - 0.5) * 2 * spread;
     const vel = d.normalize().multiplyScalar(1.6);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: 0x8b6a3e }));
+    const mesh = this.arrowMesh();
     this.scene.add(mesh);
     this.arrows.push({ pos: eye.clone(), prev: eye.clone(), vel, mesh, life: 0, stuck: false });
     this.hooks.sound('bow', eye);
+  }
+
+  // ArrowRenderer: dois quads cruzados de 16×5 px (escala 0,05625) com entity/projectiles/arrow.png
+  arrowMesh() {
+    if (!this.arrowTex) return new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.5), new THREE.MeshBasicMaterial({ color: 0x8b6a3e }));
+    this.arrowGeo ??= (() => {
+      const g = new THREE.PlaneGeometry(16 * 0.05625, 5 * 0.05625);
+      const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.5, 1 - (1 - uv.getY(i)) * 5 / 32);
+      g.rotateY(Math.PI / 2);
+      return g;
+    })();
+    this.arrowMat ??= new THREE.MeshLambertMaterial({ map: this.arrowTex, alphaTest: 0.1, side: THREE.DoubleSide, toneMapped: false });
+    const grp = new THREE.Group();
+    for (const a of [Math.PI / 4, -Math.PI / 4]) {
+      const q = new THREE.Mesh(this.arrowGeo, this.arrowMat);
+      q.rotation.z = a;
+      grp.add(q);
+    }
+    return grp;
   }
 
   tickArrows() {

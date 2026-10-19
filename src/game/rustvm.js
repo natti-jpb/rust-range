@@ -52,7 +52,16 @@ export class RustViewModel {
     this.cache = {};
     this.modCache = {};
     this.token = 0;
-    this.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    // muzzle flash do attack.prefab (muzzle_flash-front-3x3): um quadro aleatório do atlas por tiro
+    const mf = manifest.fx?.muzzle?.front;
+    let fmap = flashTexture();
+    if (mf) {
+      fmap = new THREE.TextureLoader().load(BASE + mf.file);
+      fmap.colorSpace = THREE.SRGBColorSpace;
+      fmap.repeat.set(1 / mf.tiles[0], 1 / mf.tiles[1]);
+      this.flashTiles = mf.tiles;
+    }
+    this.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: fmap, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
     this.flash.visible = false;
     this.s = { adsP: 0, ads: 0, aiming: false, bob: 0, lower: 0, swayX: 0, swayY: 0, punchT: 1, flashT: 0 };
   }
@@ -187,6 +196,10 @@ export class RustViewModel {
     this.s.punchT = 0;
     this.s.flashT = 0.05;
     this.flash.material.rotation = Math.random() * 6.28;
+    if (this.flashTiles) {
+      const [tx, ty] = this.flashTiles, i = (Math.random() * tx * ty) | 0;
+      this.flash.material.map.offset.set((i % tx) / tx, Math.floor(i / tx) / ty);
+    }
     const k = 0.12 + Math.random() * 0.08;
     this.flash.scale.set(k, k, k);
   }

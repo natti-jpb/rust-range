@@ -1,12 +1,12 @@
 import { rmSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
-// public/rust-assets/ = conteúdo extraído do jogo, só para uso local: nunca entra no build.
+// public/rust-assets/ e public/mc-assets/ = conteúdo extraído dos jogos, só para uso local: nunca entram no build.
 const stripRustAssets = {
   name: 'strip-rust-assets',
   apply: 'build',
   closeBundle() {
-    rmSync(new URL('./dist/rust-assets', import.meta.url), { recursive: true, force: true });
+    for (const d of ['rust-assets', 'mc-assets']) rmSync(new URL(`./dist/${d}`, import.meta.url), { recursive: true, force: true });
   },
 };
 

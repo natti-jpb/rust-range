@@ -4,3 +4,4 @@ dist
 __pycache__
 public/rust-assets
 .DS_Store
+public/mc-assets

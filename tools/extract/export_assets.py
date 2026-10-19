@@ -22,7 +22,7 @@ from UnityPy.helpers.MeshHelper import MeshHandler
 sys.path.insert(0, os.path.dirname(__file__))
 from glb import GLB  # noqa: E402
 from mecanim import decode_clip  # noqa: E402
-from rustfs import RustEnv  # noqa: E402
+from rustfs import RustEnv, behaviours  # noqa: E402
 
 VIEWMODELS = {
     'rifle.ak': 'assets/prefabs/weapons/ak47u/ak47u.viewmodel.prefab',
@@ -390,8 +390,9 @@ def export_attachment(env, prefab_sf, short, base, out_dir):
     return info
 
 
-def export_items(rust, out_dir, ids):
-    """Ícones e metadados (nome, descrição, pilha) do Bundles/items."""
+def export_items(env, rust, out_dir, ids, done):
+    """Ícones e metadados (nome, descrição, pilha) do Bundles/items e os sons de pegar/soltar no inventário
+    (ItemDefinition.inventoryGrabSound / inventoryDropSound, ex.: ui-pickup-gun)."""
     import shutil
     os.makedirs(os.path.join(out_dir, 'items'), exist_ok=True)
     out = {}
@@ -401,6 +402,16 @@ def export_items(rust, out_dir, ids):
         d = json.load(open(src + '.json'))
         out[short] = {'name': d['Name'], 'desc': d['Description'], 'stack': d['stackable'], 'category': d['Category'],
                       'condition': d['condition']['max'] if d['condition']['enabled'] else 0}
+    for cab in [n for n, v in env.index.items() if v[0].endswith('items.preload.bundle') and not n.endswith('.ress')]:
+        for _, o in behaviours(env.open(cab), fields={'shortname', 'inventoryGrabSound'}):
+            d = o.read_typetree()
+            if d['shortname'] not in out:
+                continue
+            for key, field in (('grab', 'inventoryGrabSound'), ('drop', 'inventoryDropSound')):
+                pp = d[field]
+                if pp['m_PathID']:
+                    f = o.assets_file if pp['m_FileID'] == 0 else env.get_cab(o.assets_file.externals[pp['m_FileID'] - 1].name)
+                    out[d['shortname']][key] = [export_sound_def(f.objects[pp['m_PathID']], out_dir, done)]
     return out
 
 
@@ -653,7 +664,9 @@ ENV_FX = {'impact_metal': IMPACT + 'metal/metal1.prefab', 'impact_wood': IMPACT 
           'impact_dirt': IMPACT + 'dirt/dirt1.prefab', 'impact_flesh': IMPACT + 'flesh/fleshbloodimpact.prefab',
           'impact_cloth': IMPACT + 'cloth/cloth1.prefab', 'impact_stone': IMPACT + 'concrete/concrete1.prefab',
           'impact_glass': IMPACT + 'glass/glass1.prefab',
-          'impact_sand': IMPACT + 'sandbag/sand_bag_impact.prefab'}
+          'impact_sand': IMPACT + 'sandbag/sand_bag_impact.prefab',
+          'takedamage': 'assets/bundled/prefabs/fx/takedamage_hit_new.prefab',
+          'takedamage_generic': 'assets/bundled/prefabs/fx/takedamage_generic.prefab'}
 ENV_DEFS = {'step_grass_walk': 'footstep-barefoot-grass-walk', 'step_grass_run': 'footstep-barefoot-grass-run',
             'step_wood_walk': 'footstep-barefoot-wood-walk', 'step_wood_run': 'footstep-barefoot-wood-run',
             'land_grass': 'footstep-barefoot-grass-jump-land', 'land_wood': 'footstep-barefoot-wood-jump-land',
@@ -735,25 +748,96 @@ def export_hud(env, rust, out_dir):
     return {'files': sorted(saved)}
 
 
+# ---------- efeitos: muzzle flash, traçante, decais de furo ----------
+
+DECALS = {  # tipo -> prefab em assets/bundled/prefabs/fx/decals/bullet/
+    'wood': 'wood/decal_bullet_wood_01', 'concrete': 'concrete/decal_bullet_concrete_01', 'metal': 'metal/decal_bullet_metal_01',
+    'dirt': 'dirt/decal_bullet_dirt_01', 'sand': 'sand/decal_bullet_sand_01', 'grass': 'grass/decal_bullet_grass_01',
+    'sandbag': 'sandbag/decal_bullet_sandbag_01', 'flesh': 'flesh/decal_bullet_flesh_entry_01', 'rock': 'rock/decal_bullet_rock',
+}
+
+
+def export_fx(env, prefab_sf, out_dir):
+    """Texturas do attack.prefab do AK (flash frontal 3×3 e lateral 1×4), do TrailRenderer do riflebullet e dos
+    DeferredDecal de furo (tamanho = escala do prefab × DecalScale.range)."""
+    d = os.path.join(out_dir, 'fx')
+    os.makedirs(d, exist_ok=True)
+    info = {'muzzle': {}, 'decals': {}}
+
+    def tex_of(mat_pptr, owner):
+        m = mat_pptr.read()
+        t = dict(m.m_SavedProperties.m_TexEnvs)['_MainTex'].m_Texture.read()
+        return m, t
+
+    tree = Tree(find_prefab(prefab_sf, 'assets/prefabs/weapons/ak47u/effects/attack.prefab'))
+    for n in tree.nodes:
+        if n['raw'] not in ('muzzleflash_billboard', 'muzzleflash_side'):
+            continue
+        cs = {o.type.name: o for o in comps(n['go'])}
+        uv = cs['ParticleSystem'].read_typetree()['UVModule']
+        _, t = tex_of(cs['ParticleSystemRenderer'].read().m_Materials[0], cs['ParticleSystemRenderer'])
+        key = 'front' if 'billboard' in n['raw'] else 'side'
+        t.image.save(os.path.join(d, f'muzzle_{key}.png'))
+        info['muzzle'][key] = {'file': f'fx/muzzle_{key}.png', 'tiles': [uv['tilesX'], uv['tilesY']]}
+    tree = Tree(find_prefab(prefab_sf, 'assets/prefabs/ammo/rifle/riflebullet.prefab'))
+    for n in tree.nodes:
+        for o in comps(n['go']):
+            if o.type.name == 'TrailRenderer':
+                r = o.read()
+                m, t = tex_of(r.m_Materials[0], o)
+                t.image.save(os.path.join(d, 'tracer.png'))
+                c = dict(m.m_SavedProperties.m_Colors)['_TintColor']
+                tt = o.read_typetree()
+                info['tracer'] = {'file': 'fx/tracer.png', 'tint': [round(c.r, 3), round(c.g, 3), round(c.b, 3)],
+                                  'time': round(tt['m_Time'], 3), 'width': round(tt['m_Parameters']['widthMultiplier'], 4)}
+    for kind, base in DECALS.items():
+        root = find_prefab(prefab_sf, f'assets/bundled/prefabs/fx/decals/bullet/{base}.prefab')
+        scale = transform_of(root).read().m_LocalScale.x
+        rng, tex = (1, 1), None
+        for o in comps(root):
+            if o.type.name != 'MonoBehaviour':
+                continue
+            tt = o.read_typetree()
+            if script_name(o) == 'DecalScale':
+                rng = (tt['range']['x'], tt['range']['y'])
+            if script_name(o) == 'DeferredDecal':
+                pp = tt['material']
+                f = o.assets_file if pp['m_FileID'] == 0 else env.get_cab(o.assets_file.externals[pp['m_FileID'] - 1].name)
+                m = f.objects[pp['m_PathID']].read()
+                tex = dict(m.m_SavedProperties.m_TexEnvs)['_MainTex'].m_Texture.read()
+        if tex is None:
+            continue
+        img = tex.image
+        if max(img.size) > 256:
+            img = img.resize((256, 256))
+        img.save(os.path.join(d, f'decal_{kind}.png'))
+        info['decals'][kind] = {'file': f'fx/decal_{kind}.png', 'size': [round(scale * rng[0], 3), round(scale * rng[1], 3)]}
+    print('   fx', info)
+    return info
+
+
 def main(rust, out_dir, ids):
     env = RustEnv(rust)
     sf = env.open('BuildPlayer-AssetScene-prefabs')
     arms = arms_source(sf)
     manifest_path = os.path.join(out_dir, 'manifest.json')
     manifest = json.load(open(manifest_path)) if os.path.exists(manifest_path) else {'weapons': {}}
-    targets = ids or ['hud', 'mods', *VIEWMODELS]
+    targets = ids or ['hud', 'mods', 'fx', *VIEWMODELS]
     done = set()
+    if 'fx' in targets:
+        manifest['fx'] = export_fx(env, sf, out_dir)
     if 'mods' in targets:
         manifest['mods'] = {}
         for short, base in MOD_VM.items():
             manifest['mods'][short] = export_attachment(env, sf, short, base, out_dir)
             print('   mod', short, manifest['mods'][short])
-        manifest['items'] = export_items(rust, out_dir, [*VIEWMODELS, *MOD_VM, *ITEMS_EXTRA])
+        os.makedirs(os.path.join(out_dir, 'snd'), exist_ok=True)
+        manifest['items'] = export_items(env, rust, out_dir, [*VIEWMODELS, *MOD_VM, *ITEMS_EXTRA], done)
     if 'hud' in targets:
         manifest['hud'] = export_hud(env, rust, out_dir)
         os.makedirs(os.path.join(out_dir, 'snd'), exist_ok=True)
         manifest['env'] = export_env_sounds(env, sf, out_dir, done)
-    for wid in [t for t in targets if t not in ('hud', 'mods')]:  # 'hud' = HUD + sons de ambiente
+    for wid in [t for t in targets if t not in ('hud', 'mods', 'fx')]:  # 'hud' = HUD + sons de ambiente
         print('>>', wid)
         info, _ = export_viewmodel(env, sf, wid, VIEWMODELS[wid], arms, out_dir)
         info['sounds'] = export_sounds(sf, info, out_dir, done)

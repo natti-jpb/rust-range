@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { buildAtlas, blockMaterial, BLOCKS, B } from './mc/blocks.js';
+import { buildChest } from './mc/models.js';
+import { loadMcManifest, McSounds, MC_BASE } from './mc/sounds.js';
+import { McParticles } from './mc/particles.js';
 import { VoxelWorld } from './mc/world.js';
 import { Entities } from './mc/entities.js';
 import { Ballistics, falloff } from './game/ballistics.js';
@@ -27,7 +30,8 @@ renderer.toneMappingExposure = 0.62;
 renderer.autoClear = false;
 
 const scene = new THREE.Scene();
-const SKY = new THREE.Color(0x8fb8ff), FOG = new THREE.Color(0xbfd6ff);
+// céu e névoa das planícies do Minecraft (skyColor 0x78A7FF, fogColor 0xC0D8FF)
+const SKY = new THREE.Color(0x78a7ff), FOG = new THREE.Color(0xc0d8ff);
 scene.background = SKY;
 scene.fog = new THREE.Fog(FOG, 70, 175);
 const camera = new THREE.PerspectiveCamera(settings.fov, 1, 0.05, 600);
@@ -39,8 +43,9 @@ scene.add(sun);
 const muzzleLight = new THREE.PointLight(0xffb060, 0, 12, 2);
 scene.add(muzzleLight);
 
-// Mundo de blocos (texturas procedurais; a versão local troca pelas do Minecraft em mc-assets/)
-const atlas = await buildAtlas(null);
+// Mundo de blocos: texturas reais do Minecraft (mc-assets/, exportadas do client.jar) ou procedurais
+const mcm = await loadMcManifest();
+const atlas = await buildAtlas(mcm ? MC_BASE + 'block/' : null);
 const world = new VoxelWorld(scene, atlas.tex, { mcTextures: atlas.real });
 world.setFog(FOG, 70, 175);
 
@@ -54,6 +59,50 @@ const env = new THREE.PMREMGenerator(renderer).fromScene(envScene, 0.04, 0.1, 20
 
 const audio = new Audio();
 audio.setVolume(settings.vol);
+audio.mcSounds = mcm && new McSounds(audio, mcm);
+
+// ---------- céu do Minecraft: sol (environment/celestial/sun.png) e nuvens rápidas (clouds.png) ----------
+const texLoader = new THREE.TextureLoader();
+const mcTex = (file) => {
+  const t = texLoader.load(MC_BASE + file);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  return t;
+};
+const SUN_DIR = sun.position.clone().normalize();
+let sunSprite = null, clouds = null;
+if (mcm) {
+  // quad de 30 a 100 de distância, blend aditivo (LevelRenderer.renderSky)
+  sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: mcTex('environment/sun.png'), blending: THREE.AdditiveBlending, fog: false, depthWrite: false, toneMapped: false }));
+  sunSprite.scale.setScalar(150);
+  sunSprite.renderOrder = -2;
+  scene.add(sunSprite);
+  // cada texel = 12 blocos; nuvens a 128 blocos acima do mar, andando 0,03 bloco/tick em +x
+  const ct = mcTex('environment/clouds.png');
+  ct.wrapS = ct.wrapT = THREE.RepeatWrapping;
+  const fade = document.createElement('canvas');
+  fade.width = fade.height = 64;
+  const fg = fade.getContext('2d'), gr = fg.createRadialGradient(32, 32, 8, 32, 32, 32);
+  gr.addColorStop(0, '#fff');
+  gr.addColorStop(1, '#000');
+  fg.fillStyle = gr;
+  fg.fillRect(0, 0, 64, 64);
+  clouds = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+    map: ct, alphaMap: new THREE.CanvasTexture(fade), transparent: true, opacity: 0.8, side: THREE.DoubleSide, fog: false, depthWrite: false,
+  }));
+  ct.repeat.set(1400 / 3072, 1400 / 3072);
+  clouds.renderOrder = -1;
+  scene.add(clouds);
+}
+let cloudDrift = 0;
+function skyUpdate(dt) {
+  if (sunSprite) sunSprite.position.copy(camera.position).addScaledVector(SUN_DIR, 500);
+  if (!clouds) return;
+  cloudDrift += dt * 0.6;
+  clouds.position.set(camera.position.x, world.rangeY + 128, camera.position.z);
+  clouds.material.map.offset.set((camera.position.x + cloudDrift - 700) / 3072, -(camera.position.z + 700) / 3072);
+}
+const mcParticles = mcm ? new McParticles(scene) : null;
 const hud = new Hud(camera);
 // Assets reais do Rust (só existem localmente, exportados do jogo instalado); sem eles, viewmodel procedural
 const manifest = await loadManifest();
@@ -106,11 +155,20 @@ player.onLand = (vy, dmg) => {
 };
 
 // ---------- entidades do Minecraft ----------
+const _rel = new THREE.Vector3(), _iq = new THREE.Quaternion();
+function mcSound(name, pos) {
+  if (!pos) return audio.mc(name, 0);
+  _rel.subVectors(pos, camera.position);
+  const d = _rel.length();
+  _rel.applyQuaternion(_iq.copy(camera.quaternion).invert());
+  audio.mc(name, d, d > 0.5 ? Math.max(-1, Math.min(1, _rel.x / d)) * 0.8 : 0);
+}
 const entities = new Entities(scene, world, {
   hurtPlayer: (dmg) => hurtPlayer(dmg),
-  sound: (name, pos) => audio.mc(name, pos ? pos.distanceTo(player.pos) : 0),
+  sound: mcSound,
   fx: (kind, pos) => {
-    if (kind === 'explosion') ballistics.fx.explosion(pos);
+    if (mcParticles) mcParticles.explosion(pos, kind === 'explosion' ? 4 : 0.8);
+    else if (kind === 'explosion') ballistics.fx.explosion(pos);
     if (kind === 'explosion_small') ballistics.fx.burst(pos, new THREE.Vector3(0, 1, 0), 'smoke');
   },
   blockMaterial: (id, flash) => blockMaterial(atlas.tex, id, flash),
@@ -123,10 +181,38 @@ const entities = new Entities(scene, world, {
   },
   pickup: () => false, // no Rust se pega com E (ver interact)
 });
+if (mcm) {
+  entities.realSkins = Object.fromEntries(['zombie', 'skeleton', 'creeper', 'pig'].map((k) => [k, mcTex(`entity/${k}.png`)]));
+  entities.arrowTex = mcTex('entity/arrow.png');
+}
+
+// baús: modelo de bloco-entidade com a tampa animada (ChestBlockEntity: openness +0,1/tick, ângulo 1 − (1 − o)³)
+const chestLids = {};
+if (mcm) {
+  const ct = mcTex('entity/chest.png');
+  for (const [x, y, z] of world.chests) {
+    const c = buildChest(ct), holder = new THREE.Group();
+    holder.position.set(x + 0.5, y, z + 0.5);
+    holder.rotation.y = Math.PI; // trinco virado para a linha de tiro (−z)
+    c.root.position.set(-0.5, 0, -0.5);
+    holder.add(c.root);
+    scene.add(holder);
+    chestLids[`${x},${y},${z}`] = { lid: c.lid, o: 0, open: false };
+  }
+}
+function chestAnim(dt) {
+  for (const c of Object.values(chestLids)) {
+    c.o = Math.max(0, Math.min(1, c.o + (c.open ? 1 : -1) * dt * 2));
+    c.lid.rotation.x = -(1 - (1 - c.o) ** 3) * Math.PI / 2;
+  }
+}
+let openChest = null;
 
 // som e partícula de impacto por grupo de som do bloco
 const IMPACT = { grass: 'dirt', gravel: 'dirt', stone: 'stone', sand: 'sand', wood: 'wood', glass: 'glass', cloth: 'cloth', water: 'dirt' };
 const ZONE = { head: 2, body: 1, legs: 0.75 };
+// decal de furo do Rust por grupo de som do bloco
+const DECAL = { wood: 'wood', stone: 'rock', grass: 'grass', gravel: 'dirt', sand: 'sand', cloth: 'sandbag' };
 const _hp = new THREE.Vector3();
 
 const ballistics = new Ballistics(scene, world, entities, (hit, w) => {
@@ -153,9 +239,10 @@ const ballistics = new Ballistics(scene, world, entities, (hit, w) => {
   audio.impact(kind, hit.dist);
   if (def.fragile) { world.set(b.x, b.y, b.z, B.AIR); audio.mc('glass_break', hit.dist); return; }
   if (def.tnt) { entities.primeTnt(b.x, b.y, b.z); return; }
-  if (!def.cutout) ballistics.fx.hole(hit, b.id === B.WOOL);
+  if (!def.cutout) ballistics.fx.hole(hit, b.id === B.WOOL, DECAL[def.sound]);
 });
 world.listeners.push((x, y, z, old, id) => { if (id === B.AIR) ballistics.fx.clearBlock(`${x},${y},${z}`); });
+if (manifest?.fx) ballistics.fx.useRust(BASE, manifest.fx);
 
 // ---------- inventário do Rust ----------
 const inv = new Inventory();
@@ -197,6 +284,13 @@ function itemMesh(it) {
   m.scale.setScalar(k === 'weapon' ? 0.7 : 0.4);
   return m;
 }
+// ItemDefinition.inventoryGrabSound / inventoryDropSound (ui-pickup-gun, ui-drop-metal...)
+function itemSound(id, kind) {
+  const defs = manifest?.items?.[id]?.[kind];
+  if (!defs || !audio.rust) return false;
+  for (const d of defs) audio.rust.def(d, 0.8);
+  return true;
+}
 const _fw = new THREE.Vector3();
 function dropWorld(it, at = null) {
   if (it === weapons?.item) weapons.hold(null);
@@ -213,6 +307,7 @@ const invui = new InventoryUI(inv, {
   onDrop: (it) => dropWorld(it),
   onAmmo: (it, a) => weapons.switchAmmo(it, a),
   onUnload: (it) => weapons.unload(it),
+  onSound: itemSound,
 });
 // arma na mão = slot ativo do belt; mexer no item (mods, munição) atualiza stats e viewmodel
 inv.listeners.push(() => (inv.held !== weapons.item ? weapons.hold(inv.held) : weapons.changed()));
@@ -229,6 +324,7 @@ function openInv(loot = null) {
 function closeInv(relock = true) {
   if (!invui.open) return;
   invui.show(false);
+  if (openChest) { openChest.open = false; openChest = null; audio.mc('chest_close', 1.5); }
   player.ui = false;
   if (relock) player.lock();
   else { menu.show(true); hud.show(false); invui.hud(false); }
@@ -263,11 +359,17 @@ function interact(inp) {
   const tgt = lookTarget();
   hud.prompt(!tgt ? null : tgt.chest ? `[E] ${t('open')}` : `[E] ${t('pickup')} ${itemName(tgt.drop.item.id)}${tgt.drop.item.amount > 1 ? ` ×${tgt.drop.item.amount}` : ''}`);
   if (!tgt || !inp.pressed.has('KeyE')) return;
-  if (tgt.chest) { openInv(arsenal(tgt.chest)); return; }
+  if (tgt.chest) {
+    openInv(arsenal(tgt.chest));
+    if (chestLids[tgt.chest]) { openChest = chestLids[tgt.chest]; openChest.open = true; }
+    const [x, y, z] = tgt.chest.split(',').map(Number);
+    mcSound('chest_open', new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
+    return;
+  }
   if (inv.give(tgt.drop.item)) {
     scene.remove(tgt.drop.mesh);
     entities.items.splice(entities.items.indexOf(tgt.drop), 1);
-    audio.click?.();
+    if (!itemSound(tgt.drop.item.id, 'grab') && !audio.mc('pop', 0)) audio.click?.();
   }
 }
 
@@ -312,6 +414,7 @@ const menu = new Menu({
       for (const info of Object.values(manifest.weapons)) audio.rust.preload(info.sounds);
       audio.rust.preload(manifest.env);
     }
+    audio.mcSounds?.preload();
     menu.markStarted();
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -403,7 +506,10 @@ function frame(ts) {
   if (menu.el.hidden) {
     entities.update(dt, player);
     ballistics.update(dt);
+    mcParticles?.update(dt);
+    chestAnim(dt);
   }
+  skyUpdate(dt);
   world.remesh(2);
   if (weapons.w) {
     vm.update(dt, {

@@ -76,7 +76,7 @@ export const MODELS = {
     ],
   },
   pig: {
-    tw: 64, th: 32, scale: 1, parts: [
+    tw: 64, th: 64, scale: 1, parts: [
       { name: 'head', size: [8, 8, 8], uv: [0, 0], pivot: [0, 12, 6], offset: [0, 0, 4], zone: 'head' },
       { name: 'snout', size: [4, 3, 1], uv: [16, 16], pivot: [0, 12, 6], offset: [0, -1, 8.5], zone: 'head' },
       { name: 'body', size: [10, 16, 8], uv: [28, 8], pivot: [0, 11, 0], offset: [0, 0, 0], rot: [Math.PI / 2, 0, 0] },
@@ -87,6 +87,27 @@ export const MODELS = {
     ],
   },
 };
+
+// Baú (ChestModel): base 14×10×14 em texOffs(0,19), tampa 14×5×14 em (0,0) com dobradiça em y=9/z=1,
+// trinco 2×4×1 em (0,0). Bloco-entidade não tem o flip das entidades (Rx(π) em relação ao boxUV), então
+// cada caixa recebe o boxUV e depois gira π em X. Frente (trinco) em +z; tex 64×64 (entity/chest/normal.png).
+export function buildChest(tex) {
+  const mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.1, toneMapped: false });
+  const box = (w, h, d, u, v, x, y, z) => {
+    const geo = new THREE.BoxGeometry(w * PX, h * PX, d * PX);
+    boxUV(geo, w, h, d, u, v, 64, 64, false);
+    geo.rotateX(Math.PI);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set((x + w / 2) * PX, (y + h / 2) * PX, (z + d / 2) * PX);
+    return m;
+  };
+  const root = new THREE.Group(), lid = new THREE.Group();
+  root.add(box(14, 10, 14, 0, 19, 1, 0, 1));
+  lid.position.set(0, 9 * PX, 1 * PX);
+  lid.add(box(14, 5, 14, 0, 0, 1, 0, 0), box(2, 4, 1, 0, 0, 7, -2, 14));
+  root.add(lid);
+  return { root, lid };
+}
 
 // ---------- skins procedurais no layout do Minecraft ----------
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -132,7 +153,7 @@ export const SKINS = {
     box(0, 0, 8, 8, 8, C, 60); box(16, 16, 8, 12, 4, C, 60); box(0, 16, 4, 6, 4, C, 60);
     for (const [x, y] of [[9, 10], [10, 10], [13, 10], [14, 10], [9, 11], [10, 11], [13, 11], [14, 11], [11, 12], [12, 12], [10, 13], [11, 13], [12, 13], [13, 13], [10, 14], [13, 14]]) px(x, y, '#111');
   }),
-  pig: () => skin(64, 32, 41, ({ box, px }) => {
+  pig: () => skin(64, 64, 41, ({ box, px }) => {
     const P = [240, 160, 160];
     box(0, 0, 8, 8, 8, P, 12); box(16, 16, 4, 3, 1, [230, 130, 140], 8); box(28, 8, 10, 16, 8, P, 12); box(0, 16, 4, 6, 4, P, 12);
     px(9, 11, '#fff'); px(10, 11, '#222'); px(13, 11, '#222'); px(14, 11, '#fff');

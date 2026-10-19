@@ -217,6 +217,7 @@ export class VoxelWorld {
       const id = this.data[this.idx(x, y, z)];
       if (!id) continue;
       const b = BLOCKS[id];
+      if (b.container && this.mcTextures) continue; // baú real: modelo de bloco-entidade (buildChest)
       for (const f of FACES) {
         const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
         const nid = this.get(nx, ny, nz);
