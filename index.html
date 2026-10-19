@@ -18,6 +18,9 @@
     <div id="hitinfo"></div>
     <div id="dmg"></div>
     <canvas id="trainer" width="240" height="300"></canvas>
+    <div id="hp"><b>100</b></div>
+    <div id="hurt"></div>
+    <div id="dead" hidden><h2 data-t="dead"></h2><p data-t="respawn"></p></div>
     <div id="weapon">
       <div id="wname"></div>
       <div id="ammo"><b id="mag"></b><span>/ ∞</span></div>
@@ -55,6 +58,7 @@
         <label><span data-t="volume"></span><input id="vol" type="range" min="0" max="1" step="0.01" /><output id="volOut"></output></label>
         <label class="check"><input id="adsToggle" type="checkbox" /><span data-t="adsToggle"></span></label>
         <label class="check"><input id="showTrainer" type="checkbox" /><span data-t="showTrainer"></span></label>
+        <label class="check"><input id="mobs" type="checkbox" /><span data-t="mobs"></span></label>
         <label class="check"><input id="lang" type="checkbox" /><span>English</span></label>
       </section>
 

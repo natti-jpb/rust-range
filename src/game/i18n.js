@@ -35,6 +35,9 @@ const S = {
   trainerScore: ['desvio médio', 'avg. drift'],
   trainerPunch: ['sem padrão fixo (chute aleatório)', 'no fixed pattern (random kick)'],
   hit: ['acerto', 'hit'],
+  dead: ['VOCÊ MORREU', 'YOU DIED'],
+  respawn: ['Clique ou aperte Espaço para renascer', 'Click or press Space to respawn'],
+  mobs: ['Mobs (zumbis, esqueletos, creepers)', 'Mobs (zombies, skeletons, creepers)'],
   head: ['cabeça', 'head'],
   kill: ['abatido', 'down'],
   how: [

@@ -41,6 +41,16 @@ html, body { margin: 0; height: 100%; background: #111; color: var(--ink); overf
 #dmg span.head { color: var(--rust2); font-size: 17px; }
 @keyframes dmg { 0% { opacity: 1; margin-top: 0; } 100% { opacity: 0; margin-top: -36px; } }
 
+#hp { position: absolute; right: 22px; bottom: 96px; font-size: 15px; color: #a5dd42; text-shadow: 0 1px 3px #000; }
+#hp b { font-size: 26px; margin-left: 4px; }
+#hp::before { content: '+'; font-weight: 900; font-size: 22px; }
+#hurt { position: absolute; inset: 0; opacity: 0; transition: opacity 0.5s; background: radial-gradient(ellipse at center, transparent 45%, rgba(160, 0, 0, 0.55)); }
+#hurt.on { opacity: 1; transition: none; }
+#dead { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(70, 0, 0, 0.55); text-align: center; }
+#dead[hidden] { display: none; }
+#dead h2 { margin: 0; font-size: 56px; letter-spacing: 0.1em; color: #f1e3d8; }
+#dead p { color: #d9c3b6; font-size: 16px; }
 #trainer { position: absolute; left: 16px; bottom: 16px; width: 240px; height: 300px; background: rgba(0, 0, 0, 0.42);
   border: 1px solid var(--line); }
 #trainer[hidden] { display: none; }

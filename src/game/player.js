@@ -1,21 +1,27 @@
 import * as THREE from 'three';
-import { BOUNDS } from './world.js';
 
 const DEG = Math.PI / 180;
-// Velocidades aproximadas do Rust (m/s)
-const WALK = 2.8, SPRINT = 5.5, CROUCH = 1.7, JUMP = 4.8, G = 9.81, R = 0.3;
+// Movimento do Rust (PlayerWalkMovement / BasePlayer): BasePlayer.GetSpeed, gravidade ×2,5, pulo +9 m/s,
+// altura 1,8 (agachado 1,1), olhos a 1,5 m (agachado −0,6). Largura de 0,6 para caber em 1 bloco.
+const G = 9.81 * 2.5, JUMP = 9, HALF = 0.3, H_STAND = 1.8, H_DUCK = 1.1;
+const lerp = (a, b, t) => a + (b - a) * t;
+const speedOf = (running, ducking) => lerp(lerp(2.8, 5.5, running), 1.7, ducking);
 
 export class Player {
-  constructor(camera, canvas, solids, settings) {
+  constructor(camera, canvas, world, settings) {
     this.camera = camera;
     this.canvas = canvas;
-    this.solids = solids;
+    this.world = world;
     this.settings = settings;
     this.aim = { body: { pitch: 0, yaw: 0 }, recoil: { pitch: 0, yaw: 0 } };
-    this.pos = new THREE.Vector3(0, 0, 3);
+    this.pos = world.spawn.clone();
     this.vel = new THREE.Vector3();
     this.ground = true;
-    this.ducking = 0; // como modelState.ducking: ducked = ducking > 0.5
+    this.ducking = 0; // físico: 0 ou 1, como BaseMovement.Ducking
+    this.duckView = 0; // suavizado para a câmera
+    this.t = 0;
+    this.jumpTime = this.landTime = -9;
+    this.groundTime = 0;
     this.keys = new Set();
     this.mouse = { left: false, right: false, leftPressed: false, rightPressed: false };
     this.dx = this.dy = 0;
@@ -67,7 +73,8 @@ export class Player {
 
   get ducked() { return this.ducking > 0.5; }
   get speed() { return Math.hypot(this.vel.x, this.vel.z); }
-  get eye() { return this.pos.y + 1.5 - 0.5 * this.ducking; }
+  get height() { return lerp(H_STAND, H_DUCK, this.ducking); }
+  get eye() { return this.pos.y + 1.5 - 0.6 * this.duckView; }
 
   // Lê e zera eventos de borda do frame.
   consume() {
@@ -80,37 +87,58 @@ export class Player {
   }
 
   update(dt, { aiming, canSprint, pressed }) {
-    const k = this.keys;
-    const crouch = k.has('KeyC') || k.has('ControlLeft');
-    this.ducking += ((crouch ? 1 : 0) - this.ducking) * Math.min(1, dt * 9);
-    const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
-    const side = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
-    this.sprinting = canSprint && k.has('ShiftLeft') && fwd > 0 && !crouch && !aiming;
-    const max = this.ducked ? CROUCH : this.sprinting ? SPRINT : WALK;
+    const k = this.keys, w = this.world;
+    this.t += dt;
+    const W = k.has('KeyW'), A = k.has('KeyA'), S = k.has('KeyS'), D = k.has('KeyD');
+    // agachar é instantâneo; levantar só se couber em pé (GetForcedDuck)
+    const wantDuck = k.has('KeyC') || k.has('ControlLeft');
+    this.ducking = wantDuck || !w.boxFree(this.pos, HALF, H_STAND) ? 1 : 0;
+    this.duckView += (this.ducking - this.duckView) * Math.min(1, dt * 10);
+    // sprint só andando para frente, sem strafe (Movement_Walking)
+    this.sprinting = canSprint && k.has('ShiftLeft') && W && !A && !S && !D && !this.ducked && !aiming;
+    const fwd = (W ? 1 : 0) - (S ? 1 : 0), side = (D ? 1 : 0) - (A ? 1 : 0);
     const yaw = this.aim.body.yaw * DEG;
-    const wish = new THREE.Vector3(Math.sin(yaw) * fwd + Math.cos(yaw) * side, 0, -Math.cos(yaw) * fwd + Math.sin(yaw) * side);
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(max);
-    const accel = this.ground ? 12 : 2;
-    this.vel.x += (wish.x - this.vel.x) * Math.min(1, dt * accel);
-    this.vel.z += (wish.z - this.vel.z) * Math.min(1, dt * accel);
-    if (this.ground && pressed.has('Space')) { this.vel.y = JUMP; this.ground = false; }
-    this.vel.y -= G * dt;
-    this.pos.addScaledVector(this.vel, dt);
+    const target = new THREE.Vector3(Math.sin(yaw) * fwd + Math.cos(yaw) * side, 0, -Math.cos(yaw) * fwd + Math.sin(yaw) * side);
+    if (target.lengthSq() > 0) target.normalize().multiplyScalar(speedOf(this.sprinting ? 1 : 0, this.ducking));
 
-    // chão (piso da linha de tiro tem 15 cm) e caixas
-    let floor = this.pos.z > 0 && this.pos.z < 6 && Math.abs(this.pos.x) < 11 ? 0.15 : 0;
-    for (const s of this.solids) {
-      if (this.pos.x > s.minX - R && this.pos.x < s.maxX + R && this.pos.z > s.minZ - R && this.pos.z < s.maxZ + R) {
-        if (this.pos.y >= s.top - 0.35) { floor = Math.max(floor, s.top); continue; }
-        const dl = this.pos.x - (s.minX - R), dr = s.maxX + R - this.pos.x, db = this.pos.z - (s.minZ - R), df = s.maxZ + R - this.pos.z;
-        const m = Math.min(dl, dr, db, df);
-        if (m === dl) this.pos.x = s.minX - R; else if (m === dr) this.pos.x = s.maxX + R;
-        else if (m === db) this.pos.z = s.minZ - R; else this.pos.z = s.maxZ + R;
-      }
+    if (this.ground) {
+      // no chão a velocidade é o alvo, sem aceleração (UpdateVelocity: grounded)
+      this.vel.x = target.x;
+      this.vel.z = target.z;
+      this.vel.y = Math.min(this.vel.y, 0);
+      this.groundTime = this.t;
+    } else {
+      const c = Math.min(1, 3 * dt); // controle no ar
+      this.vel.x += (target.x - this.vel.x) * c;
+      this.vel.z += (target.z - this.vel.z) * c;
     }
-    if (this.pos.y <= floor) { this.pos.y = floor; this.vel.y = 0; this.ground = true; } else if (this.pos.y > floor + 0.05) this.ground = false;
-    this.pos.x = Math.max(BOUNDS.minX, Math.min(BOUNDS.maxX, this.pos.x));
-    this.pos.z = Math.max(BOUNDS.minZ, Math.min(BOUNDS.maxZ, this.pos.z));
+    const canJump = this.t - this.jumpTime >= 0.5 && this.t - this.groundTime <= 0.1 && this.t - this.landTime >= 0.1;
+    if (pressed.has('Space') && canJump) {
+      this.vel.y += JUMP;
+      this.jumpTime = this.t;
+      this.ground = false;
+      this.onJump?.();
+    }
+    if (!this.ground) this.vel.y -= G * dt;
+
+    const vy = this.vel.y, wasGround = this.ground;
+    const steps = Math.max(1, Math.ceil((this.vel.length() * dt) / 0.4));
+    let landed = false;
+    for (let i = 0; i < steps; i++) {
+      const d = this.vel.clone().multiplyScalar(dt / steps);
+      const hit = w.moveBox(this.pos, HALF, this.height, d);
+      if (hit.x) this.vel.x = 0;
+      if (hit.z) this.vel.z = 0;
+      if (hit.y) { if (this.vel.y < 0) landed = true; this.vel.y = 0; }
+    }
+    // chão = há bloco sólido logo abaixo dos pés
+    this.ground = !w.boxFree({ x: this.pos.x, y: this.pos.y - 0.05, z: this.pos.z }, HALF, 0.05);
+    if (this.ground && !wasGround && (landed || vy < 0)) {
+      this.landTime = this.t;
+      // ApplyFallDamageFromVelocity: InverseLerp(-15, -100, v) × 500
+      const f = Math.min(1, Math.max(0, (vy + 15) / -85));
+      this.onLand?.(vy, f * 500);
+    }
   }
 
   // Câmera = bodyAngles + recoilAngles

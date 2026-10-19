@@ -41,6 +41,7 @@ export class Menu {
     bind('vol', 'vol', (v) => `${Math.round(v * 100)}%`);
     bind('adsToggle', 'adsToggle', String);
     bind('showTrainer', 'showTrainer', String);
+    bind('mobs', 'mobs', String);
     bind('lang', 'lang', String);
     if (!settings.lang) $('lang').checked = !navigator.language?.startsWith('pt');
     this.texts();

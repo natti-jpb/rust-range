@@ -109,6 +109,42 @@ export class Audio {
     if (head) this.tone(this.out(0.35, 0)[0], this.ctx.currentTime, 0.25, 2400, 2350, 0.5, 'triangle');
   }
 
+  // Sons do mundo/mobs: placeholders sintetizados (a versão local troca pelos do Minecraft)
+  mc(name, dist = 0) {
+    if (!this.ctx) return;
+    if (this.mcSounds?.play(name, dist)) return;
+    const fall = Math.min(1, 8 / Math.max(dist, 4));
+    if (fall < 0.04) return;
+    const [d, t] = this.out(fall, 0.3, Math.min(dist / 343, 0.3));
+    const base = name.split('_')[0];
+    if (name === 'explode') {
+      this.burst(d, t, 1.4, 'lowpass', 300, 0.6, 2.2);
+      this.tone(d, t, 0.6, 70, 25, 1.6);
+    } else if (name.endsWith('_hurt') || name.endsWith('_death')) {
+      const f = { zombie: 140, skeleton: 900, creeper: 500, pig: 420 }[base] || 300;
+      this.tone(d, t, name.endsWith('_death') ? 0.6 : 0.25, f * 1.4, f * 0.7, 0.5, base === 'skeleton' ? 'square' : 'sawtooth');
+    } else if (name === 'creeper_fuse' || name === 'tnt_fuse') {
+      this.burst(d, t, 1.4, 'highpass', 3000, 0.4, 0.9);
+    } else if (name === 'bow') {
+      this.burst(d, t, 0.18, 'bandpass', 1200, 2, 1);
+    } else if (name === 'arrow_hit') {
+      this.burst(d, t, 0.05, 'bandpass', 800, 3, 1);
+    } else if (name === 'glass_break') {
+      for (let i = 0; i < 4; i++) this.tone(d, t + i * 0.02, 0.25, 2500 + Math.random() * 2500, 1800, 0.25, 'triangle');
+      this.burst(d, t, 0.15, 'highpass', 3000, 0.6, 1);
+    } else {
+      this.burst(d, t, 0.08, 'lowpass', 600, 0.7, 0.6);
+    }
+  }
+
+  hurt() {
+    if (!this.ctx) return;
+    if (this.rust?.env('player_hurt', 0.8)) return;
+    const [d, t] = this.out(0.5, 0.1);
+    this.burst(d, t, 0.12, 'lowpass', 500, 1, 1.4);
+    this.tone(d, t, 0.15, 180, 90, 0.6);
+  }
+
   hitmarker() {
     if (!this.ctx || this.rust?.env('hitmarker', 0.8)) return;
     const [d, t] = this.out(0.18, 0);

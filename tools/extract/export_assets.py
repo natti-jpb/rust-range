@@ -520,11 +520,17 @@ def export_sounds(prefab_sf, info, out_dir, done):
 
 IMPACT = 'assets/bundled/prefabs/fx/impacts/bullet/'
 ENV_FX = {'impact_metal': IMPACT + 'metal/metal1.prefab', 'impact_wood': IMPACT + 'wood/wood1.prefab',
-          'impact_dirt': IMPACT + 'dirt/dirt1.prefab', 'impact_flesh': IMPACT + 'cloth/cloth1.prefab',
+          'impact_dirt': IMPACT + 'dirt/dirt1.prefab', 'impact_flesh': IMPACT + 'flesh/fleshbloodimpact.prefab',
+          'impact_cloth': IMPACT + 'cloth/cloth1.prefab', 'impact_stone': IMPACT + 'concrete/concrete1.prefab',
+          'impact_glass': IMPACT + 'glass/glass1.prefab',
           'impact_sand': IMPACT + 'sandbag/sand_bag_impact.prefab'}
 ENV_DEFS = {'step_grass_walk': 'footstep-barefoot-grass-walk', 'step_grass_run': 'footstep-barefoot-grass-run',
             'step_wood_walk': 'footstep-barefoot-wood-walk', 'step_wood_run': 'footstep-barefoot-wood-run',
             'land_grass': 'footstep-barefoot-grass-jump-land', 'land_wood': 'footstep-barefoot-wood-jump-land',
+            'step_stones_walk': 'footstep-barefoot-stones-walk', 'step_stones_run': 'footstep-barefoot-stones-run',
+            'step_sand_walk': 'footstep-barefoot-sand-walk', 'step_sand_run': 'footstep-barefoot-sand-run',
+            'step_gravel_walk': 'footstep-barefoot-gravel-walk', 'step_gravel_run': 'footstep-barefoot-gravel-run',
+            'land_stones': 'footstep-barefoot-stones-jump-land', 'land_sand': 'footstep-barefoot-sand-jump-land',
             'hitmarker': 'hit-marker', 'ricochet': 'ricochet'}
 
 

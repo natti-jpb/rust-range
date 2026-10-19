@@ -43,6 +43,20 @@ export class Hud {
     $('reload').firstElementChild.style.width = `${(p ?? 0) * 100}%`;
   }
 
+  health(hp) {
+    $('hp').firstElementChild.textContent = Math.ceil(hp);
+    this.rust?.health(hp);
+  }
+
+  hurt() {
+    const el = $('hurt');
+    el.classList.add('on');
+    clearTimeout(this.hurtT);
+    this.hurtT = setTimeout(() => el.classList.remove('on'), 120);
+  }
+
+  dead(on) { $('dead').hidden = !on; }
+
   ads(on) { $('crosshair').classList.toggle('ads', on); this.rust?.ads(on); }
 
   hitmarker(head) {

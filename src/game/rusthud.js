@@ -59,6 +59,13 @@ export class RustHud {
   }
 
   show(on) { this.el.hidden = !on; }
+
+  health(hp) {
+    const row = this.el.querySelector('.row');
+    row.querySelector('.fill').style.width = `${Math.max(0, Math.min(100, hp))}%`;
+    row.querySelector('span').textContent = Math.ceil(hp);
+    document.getElementById('hp').style.display = 'none';
+  }
   ads(on) { this.el.querySelector('.cross').classList.toggle('ads', on); }
 
   // states: munição de cada arma (Weapons.state), mostrada no canto do slot como no jogo
