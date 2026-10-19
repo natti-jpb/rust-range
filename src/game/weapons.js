@@ -212,11 +212,15 @@ export class Weapons {
     const { body, recoil } = p.aim;
     const pitch = body.pitch + recoil.pitch, yaw = body.yaw + recoil.yaw;
     if (g.shots === 0) {
-      this.start = { pitch, yaw };
+      this.start = { pitch, yaw, bp: body.pitch, by: body.yaw };
       this.hud.trainerReset();
       this.ballistics.fx.fadeWall();
     }
-    this.hud.trainerShot(yaw - this.start.yaw, -(pitch - this.start.pitch));
+    // erro = para onde a mira foi (0 = recoil controlado). No legado o painel mostra a compensação do mouse
+    // (movimento da mira sem o recoil, invertido), que coincide com o padrão quando o controle é perfeito.
+    const err = [yaw - this.start.yaw, -(pitch - this.start.pitch)];
+    if (settings.mode === 'legacy') this.hud.trainerShot(-(body.yaw - this.start.by), body.pitch - this.start.bp, err);
+    else this.hud.trainerShot(err[0], err[1], err);
 
     const cone = this.recoil.cone(w, g, rp, this.aiming);
     const off = this.recoil.spread(w, rp, cone);

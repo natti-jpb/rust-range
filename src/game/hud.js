@@ -112,9 +112,10 @@ export class Hud {
   }
 
   // Painel: padrão sem compensar (cinza) e direção da mira em cada tiro do spray atual (laranja).
-  pattern(w, path) { this.w = w; this.ideal = settings.mode === 'legacy' ? path : null; this.mine = []; this.draw(); }
-  trainerReset() { this.mine = []; }
-  trainerShot(x, y) { this.mine.push([x, y]); this.draw(); }
+  pattern(w, path) { this.w = w; this.ideal = settings.mode === 'legacy' ? path : null; this.mine = []; this.errs = []; this.draw(); }
+  trainerReset() { this.mine = []; this.errs = []; }
+  // (x, y): ponto desenhado; err: desvio real da mira no tiro (para a nota)
+  trainerShot(x, y, err = [x, y]) { this.mine.push([x, y]); (this.errs ??= []).push(err); this.draw(); }
 
   draw() {
     const c = this.cx, W = 240, H = 300;
@@ -165,9 +166,10 @@ export class Hud {
     c.fillStyle = '#ff7a3c';
     c.fillRect(110, H - 22, 7, 7);
     c.fillStyle = '#a59d8e';
-    c.fillText(t('trainerYou'), 121, H - 15);
+    c.fillText(t(this.ideal ? 'trainerComp' : 'trainerYou'), 121, H - 15);
     if (this.mine.length > 1) {
-      const avg = this.mine.reduce((a, [x, y]) => a + Math.hypot(x, y), 0) / this.mine.length;
+      const errs = this.errs?.length === this.mine.length ? this.errs : this.mine;
+      const avg = errs.reduce((a, [x, y]) => a + Math.hypot(x, y), 0) / errs.length;
       const cm = Math.tan(avg * Math.PI / 180) * 2500;
       c.fillStyle = '#e8e2d6';
       c.fillText(`${t('trainerScore')}: ${avg.toFixed(2)}° (${cm.toFixed(0)} cm @25 m)`, 10, H - 2 - 32 + 4);
